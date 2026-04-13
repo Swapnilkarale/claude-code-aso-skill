@@ -46,7 +46,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "ruff>=0.1.0",
-    "mypy>=1.0.0",
+    "mypy>=1.19.1",
 ]
 
 [project.urls]
