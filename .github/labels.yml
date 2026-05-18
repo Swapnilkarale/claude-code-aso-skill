@@ -1,74 +1,78 @@
 # Labels managed declaratively by .github/workflows/labels.yml
 # Adding/removing/editing a label here updates the repository on the next push.
+#
+# Note: color values are quoted strings so that hex codes containing only
+# digits (for example 000000) are not silently coerced to numbers by the
+# YAML parser - EndBug/label-sync rejects non-string colors.
 
 # --- Type / category ---
 - name: feature
-  color: a2eeef
+  color: 'a2eeef'
   description: New feature or capability
 - name: enhancement
-  color: 84b6eb
+  color: '84b6eb'
   description: Improvement to an existing feature
 - name: bug
-  color: d73a4a
+  color: 'd73a4a'
   description: Something is not working
 - name: fix
-  color: e99695
+  color: 'e99695'
   description: Bug fix
 - name: documentation
-  color: 0075ca
+  color: '0075ca'
   description: Documentation changes
 - name: refactoring
-  color: c2e0c6
+  color: 'c2e0c6'
   description: Code refactoring (no behavior change)
 - name: chore
-  color: cfd3d7
+  color: 'cfd3d7'
   description: Maintenance and tooling work
 - name: security
-  color: ee0701
+  color: 'ee0701'
   description: Security-related change
 - name: performance
-  color: fbca04
+  color: 'fbca04'
   description: Performance improvement
 - name: dependencies
-  color: 0366d6
+  color: '0366d6'
   description: Dependency update
 - name: github-actions
-  color: 000000
+  color: '000000'
   description: GitHub Actions workflow change
 - name: python
-  color: 3572A5
+  color: '3572A5'
   description: Python language related
 
 # --- Lifecycle ---
 - name: ready
-  color: 0e8a16
+  color: '0e8a16'
   description: Issue is ready to be picked up (triggers branch automation)
 - name: in-progress
-  color: fbca04
+  color: 'fbca04'
   description: Work is actively in progress
 - name: completed
-  color: 6f42c1
+  color: '6f42c1'
   description: Work has been merged and the issue is closed
 - name: release
-  color: 5319e7
+  color: '5319e7'
   description: Release PR (dev to main)
 - name: blocked
-  color: b60205
+  color: 'b60205'
   description: Blocked by another item
 
 # --- PR size ---
 - name: 'size: XS'
-  color: 00ff7f
+  color: '00ff7f'
   description: Tiny PR (<50 changes)
 - name: 'size: S'
-  color: 7fff00
+  color: '7fff00'
   description: Small PR (50-199 changes)
 - name: 'size: M'
-  color: ffff00
+  color: 'ffff00'
   description: Medium PR (200-499 changes)
 - name: 'size: L'
-  color: ffa500
+  color: 'ffa500'
   description: Large PR (500-999 changes)
 - name: 'size: XL'
-  color: ff0000
+  color: 'ff0000'
   description: Extra large PR (>=1000 changes)
