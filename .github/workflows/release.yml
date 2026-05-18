@@ -1,0 +1,194 @@
+name: Release
+
+# Automatic deployment: triggered when dev is merged into main.
+# - Builds a fresh distributable ZIP of the app-store-optimization skill
+# - Creates a GitHub Release (idempotent) using the version in pyproject.toml
+# - Attaches the ZIP and the contents of CHANGELOG [Unreleased] as release notes
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force re-release even if the tag already exists'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    name: Build skill and publish GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Read project version from pyproject.toml
+        id: version
+        run: |
+          set -e
+          VERSION="$(python -c "
+          import sys, tomllib, pathlib
+          data = tomllib.loads(pathlib.Path('pyproject.toml').read_text())
+          print(data['project']['version'])
+          ")"
+          if [ -z "$VERSION" ]; then
+            echo "Could not read version from pyproject.toml" >&2
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Detected release version: $TAG"
+
+      - name: Check whether tag already exists
+        id: tag-check
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists."
+            if [ "${FORCE}" = "true" ]; then
+              echo "Force requested; will recreate release artifacts."
+              echo "needs_release=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "needs_release=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "needs_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate Python syntax in skill modules
+        if: steps.tag-check.outputs.needs_release == 'true'
+        run: |
+          set -e
+          find app-store-optimization -name '*.py' -type f -print0 \
+            | xargs -0 -r python -m py_compile
+          echo "Skill modules compile cleanly."
+
+      - name: Build skill ZIP
+        if: steps.tag-check.outputs.needs_release == 'true'
+        id: build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -e
+          ZIP_NAME="app-store-optimization-${VERSION}.zip"
+          STAGE="$(mktemp -d)"
+          mkdir -p "${STAGE}/app-store-optimization"
+          # Copy skill payload, excluding build/cache and OS clutter
+          rsync -a \
+            --exclude '__pycache__' \
+            --exclude '.pytest_cache' \
+            --exclude '.mypy_cache' \
+            --exclude '.ruff_cache' \
+            --exclude '*.pyc' \
+            --exclude '.DS_Store' \
+            app-store-optimization/ "${STAGE}/app-store-optimization/"
+          (cd "${STAGE}" && zip -qr "${GITHUB_WORKSPACE}/${ZIP_NAME}" app-store-optimization)
+          ls -lh "${GITHUB_WORKSPACE}/${ZIP_NAME}"
+          echo "zip_path=${GITHUB_WORKSPACE}/${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Compose release notes
+        if: steps.tag-check.outputs.needs_release == 'true'
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -e
+          NOTES_FILE="$(mktemp)"
+
+          # Prefer the versioned section in CHANGELOG.md if present
+          if [ -f CHANGELOG.md ]; then
+            EXTRACTED="$(awk -v v="${VERSION}" '
+              BEGIN { flag=0 }
+              $0 ~ "^## \\[" v "\\]" { flag=1; next }
+              flag && /^## \[/ { exit }
+              flag { print }
+            ' CHANGELOG.md)"
+            if [ -n "$EXTRACTED" ]; then
+              {
+                echo "## Release ${VERSION}"
+                echo
+                echo "$EXTRACTED"
+              } > "$NOTES_FILE"
+            fi
+          fi
+
+          # Fallback: commits since previous tag
+          if [ ! -s "$NOTES_FILE" ]; then
+            LAST_TAG="$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || true)"
+            {
+              echo "## Release ${VERSION}"
+              echo
+              if [ -n "$LAST_TAG" ]; then
+                echo "### Commits since ${LAST_TAG}"
+                echo
+                git log "${LAST_TAG}..HEAD" --pretty=format:"- %s (%h)"
+              else
+                echo "### Initial release commits"
+                echo
+                git log --pretty=format:"- %s (%h)"
+              fi
+              echo
+            } > "$NOTES_FILE"
+          fi
+
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        if: steps.tag-check.outputs.needs_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body_path: ${{ steps.notes.outputs.notes_file }}
+          files: ${{ steps.build.outputs.zip_path }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          make_latest: 'true'
+
+      - name: Skip notice
+        if: steps.tag-check.outputs.needs_release == 'false'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: echo "Tag ${TAG} already exists and force was not requested; skipping release."
+
+      - name: Summary
+        if: always()
+        env:
+          NEEDS: ${{ steps.tag-check.outputs.needs_release }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ZIP: ${{ steps.build.outputs.zip_name }}
+        run: |
+          {
+            echo "## Release Workflow"
+            echo
+            echo "- Tag: ${TAG}"
+            if [ "${NEEDS}" = "true" ]; then
+              echo "- Artifact: ${ZIP}"
+              echo "- Status: published"
+            else
+              echo "- Status: skipped (tag already existed)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

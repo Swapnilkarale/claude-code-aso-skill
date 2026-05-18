@@ -1,5 +1,8 @@
 name: Auto-Create PR to Dev
 
+# Branching strategy: working branches (feature-*, fix-*, docs-*, refactor-*, chore-*)
+# always merge into `dev` via auto-created PRs. Only `dev` ever merges into `main`.
+
 on:
   push:
     branches:
@@ -7,11 +10,16 @@ on:
       - 'fix-**'
       - 'docs-**'
       - 'refactor-**'
+      - 'chore-**'
 
 permissions:
   contents: read
   pull-requests: write
   issues: write
+
+concurrency:
+  group: auto-pr-dev-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   create-pr:
@@ -24,13 +32,29 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify dev branch exists
+        id: verify-dev
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: 'dev',
+              });
+              core.setOutput('exists', 'true');
+            } catch (e) {
+              core.setFailed(`Required base branch 'dev' does not exist. Create it from main first.`);
+            }
+
       - name: Check if PR already exists
         id: check-pr
+        if: steps.verify-dev.outputs.exists == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const branch = context.ref.replace('refs/heads/', '');
-
             const { data: pulls } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -38,199 +62,148 @@ jobs:
               base: 'dev',
               state: 'open',
             });
-
             if (pulls.length > 0) {
-              console.log(`PR already exists: #${pulls[0].number}`);
               core.setOutput('pr_exists', 'true');
-              core.setOutput('pr_number', pulls[0].number);
+              core.setOutput('pr_number', String(pulls[0].number));
             } else {
-              console.log('No existing PR found');
               core.setOutput('pr_exists', 'false');
             }
 
-      - name: Extract issue number
+      - name: Extract issue number from branch name
         id: extract-issue
         if: steps.check-pr.outputs.pr_exists == 'false'
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-
-          # Extract issue number from branch name (format: {type}-{number}-{slug})
-          if [[ $BRANCH_NAME =~ ^(feature|fix|docs|refactor)-([0-9]+)- ]]; then
-            ISSUE_NUMBER="${BASH_REMATCH[2]}"
-            echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
-            echo "has_issue=true" >> $GITHUB_OUTPUT
+          if [[ "$BRANCH_NAME" =~ ^(feature|fix|docs|refactor|chore)-([0-9]+)- ]]; then
+            echo "issue_number=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+            echo "has_issue=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_issue=false" >> $GITHUB_OUTPUT
+            echo "has_issue=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Get issue details
-        id: get-issue
-        if: steps.check-pr.outputs.pr_exists == 'false' && steps.extract-issue.outputs.has_issue == 'true'
+      - name: Build PR title, body and labels
+        id: build-pr
+        if: steps.check-pr.outputs.pr_exists == 'false'
         uses: actions/github-script@v7
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          HAS_ISSUE: ${{ steps.extract-issue.outputs.has_issue }}
+          ISSUE_NUMBER: ${{ steps.extract-issue.outputs.issue_number }}
         with:
           script: |
-            const issueNumber = ${{ steps.extract-issue.outputs.issue_number }};
+            const branch = process.env.BRANCH_NAME;
+            const hasIssue = process.env.HAS_ISSUE === 'true';
+            const issueNumber = hasIssue ? parseInt(process.env.ISSUE_NUMBER, 10) : null;
 
-            try {
-              const { data: issue } = await github.rest.issues.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-              });
-
-              core.setOutput('title', issue.title);
-              core.setOutput('body', issue.body || '');
-              core.setOutput('labels', issue.labels.map(l => l.name).join(','));
-            } catch (error) {
-              console.log(`Could not fetch issue #${issueNumber}: ${error.message}`);
-              core.setOutput('title', '');
+            let issueTitle = '';
+            let issueBody = '';
+            if (hasIssue && Number.isInteger(issueNumber)) {
+              try {
+                const { data: issue } = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                });
+                issueTitle = issue.title || '';
+                issueBody = issue.body || '';
+              } catch (e) {
+                core.warning(`Could not fetch issue #${issueNumber}: ${e.message}`);
+              }
             }
 
-      - name: Determine PR labels
-        id: determine-labels
-        if: steps.check-pr.outputs.pr_exists == 'false'
-        run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            const prefixMap = {
+              feature:  { commit: 'feat',     labels: ['feature', 'enhancement'] },
+              fix:      { commit: 'fix',      labels: ['bug', 'fix']             },
+              docs:     { commit: 'docs',     labels: ['documentation']          },
+              refactor: { commit: 'refactor', labels: ['refactoring']            },
+              chore:    { commit: 'chore',    labels: ['chore']                  },
+            };
+            const typeKey = (branch.match(/^(feature|fix|docs|refactor|chore)-/) || [])[1] || 'chore';
+            const { commit: commitPrefix, labels } = prefixMap[typeKey];
 
-          # Determine labels based on branch prefix
-          if [[ $BRANCH_NAME == feature-* ]]; then
-            echo "labels=feature,enhancement" >> $GITHUB_OUTPUT
-          elif [[ $BRANCH_NAME == fix-* ]]; then
-            echo "labels=bug,fix" >> $GITHUB_OUTPUT
-          elif [[ $BRANCH_NAME == docs-* ]]; then
-            echo "labels=documentation" >> $GITHUB_OUTPUT
-          elif [[ $BRANCH_NAME == refactor-* ]]; then
-            echo "labels=refactoring" >> $GITHUB_OUTPUT
-          else
-            echo "labels=" >> $GITHUB_OUTPUT
-          fi
+            let title;
+            if (issueTitle) {
+              title = issueTitle;
+            } else {
+              const slug = branch
+                .replace(/^(feature|fix|docs|refactor|chore)-\d+-/, '')
+                .replace(/^(feature|fix|docs|refactor|chore)-/, '')
+                .replace(/-/g, ' ');
+              title = `${commitPrefix}: ${slug}`;
+            }
 
-      - name: Create PR title
-        id: create-title
-        if: steps.check-pr.outputs.pr_exists == 'false'
-        run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            let body = `## Auto-Generated PR\n\nThis PR was automatically created from branch \`${branch}\` and targets \`dev\`.\n\n`;
+            if (hasIssue) {
+              body += `**Linked issue:** #${issueNumber}\n\n`;
+            }
+            if (issueBody) {
+              body += `## Issue Description\n\n${issueBody}\n\n`;
+            }
+            body += `---\n\n**Please review the PR template checklist and fill in any remaining details.**`;
 
-          # If we have issue title, use it; otherwise, create from branch
-          if [ -n "${{ steps.get-issue.outputs.title }}" ]; then
-            TITLE="${{ steps.get-issue.outputs.title }}"
-          else
-            # Create title from branch name
-            SLUG=$(echo "$BRANCH_NAME" | sed -E 's/^(feature|fix|docs|refactor)-[0-9]+-//' | tr '-' ' ')
-            TYPE=$(echo "$BRANCH_NAME" | sed -E 's/-[0-9]+-.*//')
-
-            case $TYPE in
-              feature) PREFIX="feat" ;;
-              fix) PREFIX="fix" ;;
-              docs) PREFIX="docs" ;;
-              refactor) PREFIX="refactor" ;;
-              *) PREFIX="chore" ;;
-            esac
-
-            TITLE="$PREFIX: $SLUG"
-          fi
-
-          echo "title=$TITLE" >> $GITHUB_OUTPUT
-
-      - name: Create PR body
-        id: create-body
-        if: steps.check-pr.outputs.pr_exists == 'false'
-        run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-
-          # Build PR body
-          BODY="## Auto-Generated PR
-
-This PR was automatically created from branch \`$BRANCH_NAME\`.
-
-"
-
-          # Add issue link if available
-          if [ "${{ steps.extract-issue.outputs.has_issue }}" == "true" ]; then
-            BODY+="**Linked Issue:** #${{ steps.extract-issue.outputs.issue_number }}
-
-"
-          fi
-
-          # Add issue body if available
-          if [ -n "${{ steps.get-issue.outputs.body }}" ]; then
-            BODY+="## Issue Description
-
-${{ steps.get-issue.outputs.body }}
-
-"
-          fi
-
-          BODY+="---
-
-**Please review the PR template checklist below and fill in the details.**"
-
-          # Save to file for multiline handling
-          echo "$BODY" > /tmp/pr-body.txt
-          echo "body_file=/tmp/pr-body.txt" >> $GITHUB_OUTPUT
+            core.setOutput('title', title);
+            core.setOutput('body', body);
+            core.setOutput('labels', labels.join(','));
 
       - name: Create pull request
         if: steps.check-pr.outputs.pr_exists == 'false'
-        id: create-pr-step
         uses: actions/github-script@v7
+        env:
+          PR_TITLE: ${{ steps.build-pr.outputs.title }}
+          PR_BODY: ${{ steps.build-pr.outputs.body }}
+          PR_LABELS: ${{ steps.build-pr.outputs.labels }}
+          HAS_ISSUE: ${{ steps.extract-issue.outputs.has_issue }}
+          ISSUE_NUMBER: ${{ steps.extract-issue.outputs.issue_number }}
         with:
           script: |
-            const fs = require('fs');
             const branch = context.ref.replace('refs/heads/', '');
-
-            const title = '${{ steps.create-title.outputs.title }}';
-            const bodyFile = '${{ steps.create-body.outputs.body_file }}';
-            const body = fs.readFileSync(bodyFile, 'utf8');
-            const labels = '${{ steps.determine-labels.outputs.labels }}'.split(',').filter(l => l);
+            const title = process.env.PR_TITLE;
+            const body = process.env.PR_BODY;
+            const labels = (process.env.PR_LABELS || '').split(',').filter(Boolean);
 
             const { data: pr } = await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: title,
-              body: body,
+              title,
+              body,
               head: branch,
               base: 'dev',
             });
+            core.info(`Created PR #${pr.number}: ${pr.html_url}`);
 
-            console.log(`Created PR #${pr.number}: ${pr.html_url}`);
-
-            // Add labels
             if (labels.length > 0) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.number,
-                labels: labels,
+                labels,
               });
             }
 
-            // Link to issue if available
-            if ('${{ steps.extract-issue.outputs.has_issue }}' === 'true') {
-              const issueNumber = ${{ steps.extract-issue.outputs.issue_number }};
-
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: `🔗 PR created: #${pr.number}\n\nReview and merge when ready.`,
-              });
+            if (process.env.HAS_ISSUE === 'true') {
+              const issueNumber = parseInt(process.env.ISSUE_NUMBER, 10);
+              if (Number.isInteger(issueNumber)) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: `PR created: #${pr.number}\n\nReview and merge when ready.`,
+                });
+              }
             }
-
-            core.setOutput('pr_number', pr.number);
-            core.setOutput('pr_url', pr.html_url);
 
       - name: Comment on existing PR
         if: steps.check-pr.outputs.pr_exists == 'true'
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.check-pr.outputs.pr_number }}
         with:
           script: |
-            const prNumber = ${{ steps.check-pr.outputs.pr_number }};
-
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              body: `✅ New commits pushed to this PR. Review updated.`,
+              body: `New commits pushed (\`${context.sha.substring(0, 7)}\`). CI re-running.`,
             });
-
-            console.log(`Updated existing PR #${prNumber}`);

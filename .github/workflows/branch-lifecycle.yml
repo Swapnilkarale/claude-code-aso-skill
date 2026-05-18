@@ -1,10 +1,13 @@
 name: Branch Lifecycle Automation
 
+# Automates: branch creation from issues, rebase on dev before merge,
+# delete merged branch, close linked issue.
+
 on:
   issues:
     types: [labeled]
   pull_request:
-    types: [opened, synchronize, closed]
+    types: [synchronize, closed]
 
 permissions:
   contents: write
@@ -18,70 +21,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Create branch from issue
         uses: actions/github-script@v7
         with:
           script: |
             const issue = context.payload.issue;
             const issueNumber = issue.number;
-            const issueTitle = issue.title;
+            const issueTitle = issue.title || '';
+            const labelNames = (issue.labels || []).map(l => l.name);
 
-            // Determine branch prefix from labels
-            let branchPrefix = 'feature';
-            const labels = issue.labels.map(l => l.name);
+            // Choose branch prefix from labels
+            let prefix = 'feature';
+            if (labelNames.includes('bug') || labelNames.includes('fix')) prefix = 'fix';
+            else if (labelNames.includes('documentation')) prefix = 'docs';
+            else if (labelNames.includes('refactoring')) prefix = 'refactor';
+            else if (labelNames.includes('chore')) prefix = 'chore';
+            else if (labelNames.includes('enhancement') || labelNames.includes('feature')) prefix = 'feature';
 
-            if (labels.includes('bug')) {
-              branchPrefix = 'fix';
-            } else if (labels.includes('documentation')) {
-              branchPrefix = 'docs';
-            } else if (labels.includes('enhancement') || labels.includes('feature')) {
-              branchPrefix = 'feature';
-            }
-
-            // Create slug from issue title
             const slug = issueTitle
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, '-')
               .replace(/^-|-$/g, '')
-              .substring(0, 30);
+              .substring(0, 40);
+            const branchName = `${prefix}-${issueNumber}-${slug}`;
 
-            const branchName = `${branchPrefix}-${issueNumber}-${slug}`;
-
-            // Check if branch already exists
+            // If branch already exists, just nudge the user
             try {
               await github.rest.repos.getBranch({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 branch: branchName,
               });
-
-              console.log(`Branch ${branchName} already exists, skipping creation`);
-
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issueNumber,
-                body: `ℹ️ Branch \`${branchName}\` already exists. You can start working on it:\n\n\`\`\`bash\ngit fetch origin\ngit checkout ${branchName}\n\`\`\``,
+                body: [
+                  `Branch \`${branchName}\` already exists. Start working on it:`,
+                  '',
+                  '```bash',
+                  `git fetch origin`,
+                  `git checkout ${branchName}`,
+                  '```',
+                ].join('\n'),
               });
-
               return;
-            } catch (error) {
-              if (error.status !== 404) throw error;
+            } catch (e) {
+              if (e.status !== 404) throw e;
             }
 
-            // Get dev branch SHA
+            // Branch must be created from dev (enforces branching strategy)
             const { data: devBranch } = await github.rest.repos.getBranch({
               owner: context.repo.owner,
               repo: context.repo.repo,
               branch: 'dev',
             });
 
-            // Create new branch from dev
             await github.rest.git.createRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -89,17 +84,22 @@ jobs:
               sha: devBranch.commit.sha,
             });
 
-            console.log(`Created branch: ${branchName}`);
-
-            // Add comment to issue
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `✅ Branch created: \`${branchName}\`\n\nYou can start working on this issue:\n\n\`\`\`bash\ngit fetch origin\ngit checkout ${branchName}\n\`\`\`\n\nWhen ready, push your changes and a PR will be automatically created.`,
+              body: [
+                `Branch created from \`dev\`: \`${branchName}\``,
+                '',
+                '```bash',
+                `git fetch origin`,
+                `git checkout ${branchName}`,
+                '```',
+                '',
+                'When you push commits, a PR to `dev` will be auto-created.',
+              ].join('\n'),
             });
 
-            // Add "in-progress" label
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -107,13 +107,17 @@ jobs:
               labels: ['in-progress'],
             });
 
-  auto-update-branch:
-    name: Auto-Update Branch Before Merge
-    if: github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.pull_request.base.ref == 'dev'
+  auto-rebase-on-dev:
+    name: Auto-Rebase PR on dev
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'synchronize' &&
+      github.event.pull_request.base.ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -122,7 +126,7 @@ jobs:
 
       - name: Configure git
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Rebase on dev
@@ -130,23 +134,20 @@ jobs:
         continue-on-error: true
         run: |
           git fetch origin dev
-
-          # Check if rebase is needed
           if git merge-base --is-ancestor origin/dev HEAD; then
-            echo "Branch is up-to-date with dev"
-            echo "rebase_needed=false" >> $GITHUB_OUTPUT
+            echo "Branch already up to date with dev."
+            echo "rebase_needed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          echo "Rebasing on dev..."
+          echo "Rebasing on origin/dev..."
           if git rebase origin/dev; then
-            echo "rebase_needed=true" >> $GITHUB_OUTPUT
-            echo "rebase_success=true" >> $GITHUB_OUTPUT
+            echo "rebase_needed=true"  >> "$GITHUB_OUTPUT"
+            echo "rebase_success=true" >> "$GITHUB_OUTPUT"
             git push --force-with-lease
           else
-            echo "rebase_needed=true" >> $GITHUB_OUTPUT
-            echo "rebase_success=false" >> $GITHUB_OUTPUT
-            git rebase --abort
+            echo "rebase_needed=true"  >> "$GITHUB_OUTPUT"
+            echo "rebase_success=false" >> "$GITHUB_OUTPUT"
+            git rebase --abort || true
           fi
 
       - name: Comment on conflict
@@ -158,12 +159,27 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              body: `⚠️ **Merge Conflict Detected**\n\nThis branch has conflicts with \`dev\`. Please resolve them manually:\n\n\`\`\`bash\ngit fetch origin\ngit rebase origin/dev\n# Resolve conflicts\ngit rebase --continue\ngit push --force-with-lease\n\`\`\``,
+              body: [
+                '**Merge conflict detected**',
+                '',
+                'This branch has conflicts with `dev`. Resolve them locally:',
+                '',
+                '```bash',
+                'git fetch origin',
+                'git rebase origin/dev',
+                '# Resolve conflicts, then:',
+                'git rebase --continue',
+                'git push --force-with-lease',
+                '```',
+              ].join('\n'),
             });
 
-  auto-delete-branch:
+  auto-delete-merged-branch:
     name: Auto-Delete Merged Branch
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
@@ -173,10 +189,14 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const branchName = pr.head.ref;
+            const protectedBranches = new Set(['main', 'dev', 'develop', 'master']);
 
-            // Don't delete protected branches
-            if (['main', 'dev', 'develop', 'master'].includes(branchName)) {
-              console.log(`Skipping deletion of protected branch: ${branchName}`);
+            if (protectedBranches.has(branchName)) {
+              core.info(`Skipping deletion of protected branch: ${branchName}`);
+              return;
+            }
+            if (pr.head.repo.full_name !== context.repo.owner + '/' + context.repo.repo) {
+              core.info(`Skipping deletion of branch on fork: ${pr.head.repo.full_name}`);
               return;
             }
 
@@ -186,22 +206,23 @@ jobs:
                 repo: context.repo.repo,
                 ref: `heads/${branchName}`,
               });
-
-              console.log(`Deleted branch: ${branchName}`);
-
+              core.info(`Deleted branch: ${branchName}`);
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.number,
-                body: `✅ Branch \`${branchName}\` has been automatically deleted after merge.`,
+                body: `Branch \`${branchName}\` was automatically deleted after merge.`,
               });
-            } catch (error) {
-              console.log(`Could not delete branch ${branchName}: ${error.message}`);
+            } catch (e) {
+              core.warning(`Could not delete branch ${branchName}: ${e.message}`);
             }
 
-  auto-close-issue:
+  auto-close-linked-issue:
     name: Auto-Close Linked Issue
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
@@ -211,63 +232,51 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const branchName = pr.head.ref;
-
-            // Extract issue number from branch name (format: {type}-{number}-{slug})
-            const match = branchName.match(/^(?:feature|fix|docs|refactor)-(\d+)-/);
+            const match = branchName.match(/^(?:feature|fix|docs|refactor|chore)-(\d+)-/);
 
             if (!match) {
-              console.log(`No issue number found in branch name: ${branchName}`);
+              core.info(`No issue number in branch name: ${branchName}`);
               return;
             }
-
             const issueNumber = parseInt(match[1], 10);
 
             try {
-              // Check if issue exists and is open
               const { data: issue } = await github.rest.issues.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issueNumber,
               });
+              if (issue.state !== 'open') return;
 
-              if (issue.state === 'open') {
-                // Close the issue
-                await github.rest.issues.update({
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                state: 'closed',
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `Closed automatically by merging PR #${pr.number}.`,
+              });
+
+              try {
+                await github.rest.issues.removeLabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: issueNumber,
-                  state: 'closed',
+                  name: 'in-progress',
                 });
+              } catch (_) { /* label may not exist */ }
 
-                // Add comment linking to PR
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issueNumber,
-                  body: `✅ Closed automatically by merging PR #${pr.number}`,
-                });
-
-                // Remove "in-progress" label and add "completed"
-                try {
-                  await github.rest.issues.removeLabel({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: issueNumber,
-                    name: 'in-progress',
-                  });
-                } catch (e) {
-                  // Label might not exist
-                }
-
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issueNumber,
-                  labels: ['completed'],
-                });
-
-                console.log(`Closed issue #${issueNumber}`);
-              }
-            } catch (error) {
-              console.log(`Could not close issue #${issueNumber}: ${error.message}`);
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: ['completed'],
+              });
+              core.info(`Closed issue #${issueNumber}`);
+            } catch (e) {
+              core.warning(`Could not close issue #${issueNumber}: ${e.message}`);
             }

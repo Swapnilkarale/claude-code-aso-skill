@@ -3,7 +3,7 @@ Keyword analysis module for App Store Optimization.
 Analyzes keyword search volume, competition, and relevance for app discovery.
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Tuple
 import re
 from collections import Counter
 
@@ -12,11 +12,7 @@ class KeywordAnalyzer:
     """Analyzes keywords for ASO effectiveness."""
 
     # Competition level thresholds (based on number of competing apps)
-    COMPETITION_THRESHOLDS = {
-        'low': 1000,
-        'medium': 5000,
-        'high': 10000
-    }
+    COMPETITION_THRESHOLDS = {'low': 1000, 'medium': 5000, 'high': 10000}
 
     # Search volume categories (monthly searches estimate)
     VOLUME_CATEGORIES = {
@@ -24,7 +20,7 @@ class KeywordAnalyzer:
         'low': 5000,
         'medium': 20000,
         'high': 100000,
-        'very_high': 500000
+        'very_high': 500000,
     }
 
     def __init__(self):
@@ -36,7 +32,7 @@ class KeywordAnalyzer:
         keyword: str,
         search_volume: int = 0,
         competing_apps: int = 0,
-        relevance_score: float = 0.0
+        relevance_score: float = 0.0,
     ) -> Dict[str, Any]:
         """
         Analyze a single keyword for ASO potential.
@@ -52,16 +48,11 @@ class KeywordAnalyzer:
         """
         competition_level = self._calculate_competition_level(competing_apps)
         volume_category = self._categorize_search_volume(search_volume)
-        difficulty_score = self._calculate_keyword_difficulty(
-            search_volume,
-            competing_apps
-        )
+        difficulty_score = self._calculate_keyword_difficulty(search_volume, competing_apps)
 
         # Calculate potential score (0-100)
         potential_score = self._calculate_potential_score(
-            search_volume,
-            competing_apps,
-            relevance_score
+            search_volume, competing_apps, relevance_score
         )
 
         analysis = {
@@ -74,12 +65,10 @@ class KeywordAnalyzer:
             'difficulty_score': difficulty_score,
             'potential_score': potential_score,
             'recommendation': self._generate_recommendation(
-                potential_score,
-                difficulty_score,
-                relevance_score
+                potential_score, difficulty_score, relevance_score
             ),
             'keyword_length': len(keyword.split()),
-            'is_long_tail': len(keyword.split()) >= 3
+            'is_long_tail': len(keyword.split()) >= 3,
         }
 
         self.analyzed_keywords[keyword] = analysis
@@ -101,31 +90,28 @@ class KeywordAnalyzer:
                 keyword=kw_data['keyword'],
                 search_volume=kw_data.get('search_volume', 0),
                 competing_apps=kw_data.get('competing_apps', 0),
-                relevance_score=kw_data.get('relevance_score', 0.0)
+                relevance_score=kw_data.get('relevance_score', 0.0),
             )
             analyses.append(analysis)
 
         # Sort by potential score (descending)
-        ranked_keywords = sorted(
-            analyses,
-            key=lambda x: x['potential_score'],
-            reverse=True
-        )
+        ranked_keywords = sorted(analyses, key=lambda x: x['potential_score'], reverse=True)
 
         # Categorize keywords
         primary_keywords = [
-            kw for kw in ranked_keywords
+            kw
+            for kw in ranked_keywords
             if kw['potential_score'] >= 70 and kw['relevance_score'] >= 0.8
         ]
 
         secondary_keywords = [
-            kw for kw in ranked_keywords
+            kw
+            for kw in ranked_keywords
             if 50 <= kw['potential_score'] < 70 and kw['relevance_score'] >= 0.6
         ]
 
         long_tail_keywords = [
-            kw for kw in ranked_keywords
-            if kw['is_long_tail'] and kw['relevance_score'] >= 0.7
+            kw for kw in ranked_keywords if kw['is_long_tail'] and kw['relevance_score'] >= 0.7
         ]
 
         return {
@@ -135,16 +121,12 @@ class KeywordAnalyzer:
             'secondary_keywords': secondary_keywords[:10],  # Top 10
             'long_tail_keywords': long_tail_keywords[:10],  # Top 10
             'summary': self._generate_comparison_summary(
-                primary_keywords,
-                secondary_keywords,
-                long_tail_keywords
-            )
+                primary_keywords, secondary_keywords, long_tail_keywords
+            ),
         }
 
     def find_long_tail_opportunities(
-        self,
-        base_keyword: str,
-        modifiers: List[str]
+        self, base_keyword: str, modifiers: List[str]
     ) -> List[Dict[str, Any]]:
         """
         Generate long-tail keyword variations.
@@ -162,39 +144,43 @@ class KeywordAnalyzer:
         for modifier in modifiers:
             # Modifier + base
             variation1 = f"{modifier} {base_keyword}"
-            long_tail_keywords.append({
-                'keyword': variation1,
-                'pattern': 'modifier_base',
-                'estimated_competition': 'low',
-                'rationale': f"Less competitive variation of '{base_keyword}'"
-            })
+            long_tail_keywords.append(
+                {
+                    'keyword': variation1,
+                    'pattern': 'modifier_base',
+                    'estimated_competition': 'low',
+                    'rationale': f"Less competitive variation of '{base_keyword}'",
+                }
+            )
 
             # Base + modifier
             variation2 = f"{base_keyword} {modifier}"
-            long_tail_keywords.append({
-                'keyword': variation2,
-                'pattern': 'base_modifier',
-                'estimated_competition': 'low',
-                'rationale': f"Specific use-case variation of '{base_keyword}'"
-            })
+            long_tail_keywords.append(
+                {
+                    'keyword': variation2,
+                    'pattern': 'base_modifier',
+                    'estimated_competition': 'low',
+                    'rationale': f"Specific use-case variation of '{base_keyword}'",
+                }
+            )
 
         # Add question-based long-tail
         question_words = ['how', 'what', 'best', 'top']
         for q_word in question_words:
             question_keyword = f"{q_word} {base_keyword}"
-            long_tail_keywords.append({
-                'keyword': question_keyword,
-                'pattern': 'question_based',
-                'estimated_competition': 'very_low',
-                'rationale': f"Informational search query"
-            })
+            long_tail_keywords.append(
+                {
+                    'keyword': question_keyword,
+                    'pattern': 'question_based',
+                    'estimated_competition': 'very_low',
+                    'rationale': "Informational search query",
+                }
+            )
 
         return long_tail_keywords
 
     def extract_keywords_from_text(
-        self,
-        text: str,
-        min_word_length: int = 3
+        self, text: str, min_word_length: int = 3
     ) -> List[Tuple[str, int]]:
         """
         Extract potential keywords from text (descriptions, reviews).
@@ -218,8 +204,23 @@ class KeywordAnalyzer:
 
         # Remove common stop words
         stop_words = {
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have',
-            'but', 'not', 'you', 'all', 'can', 'are', 'was', 'were', 'been'
+            'the',
+            'and',
+            'for',
+            'with',
+            'this',
+            'that',
+            'from',
+            'have',
+            'but',
+            'not',
+            'you',
+            'all',
+            'can',
+            'are',
+            'was',
+            'were',
+            'been',
         }
         words = [w for w in words if w not in stop_words]
 
@@ -240,11 +241,7 @@ class KeywordAnalyzer:
 
         return all_keywords[:50]  # Top 50
 
-    def calculate_keyword_density(
-        self,
-        text: str,
-        target_keywords: List[str]
-    ) -> Dict[str, float]:
+    def calculate_keyword_density(self, text: str, target_keywords: List[str]) -> Dict[str, float]:
         """
         Calculate keyword density in text.
 
@@ -291,11 +288,7 @@ class KeywordAnalyzer:
         else:
             return 'very_high'
 
-    def _calculate_keyword_difficulty(
-        self,
-        search_volume: int,
-        competing_apps: int
-    ) -> float:
+    def _calculate_keyword_difficulty(self, search_volume: int, competing_apps: int) -> float:
         """
         Calculate keyword difficulty score (0-100).
         Higher score = harder to rank.
@@ -315,10 +308,7 @@ class KeywordAnalyzer:
         return round(difficulty, 1)
 
     def _calculate_potential_score(
-        self,
-        search_volume: int,
-        competing_apps: int,
-        relevance_score: float
+        self, search_volume: int, competing_apps: int, relevance_score: float
     ) -> float:
         """
         Calculate overall keyword potential (0-100).
@@ -341,10 +331,7 @@ class KeywordAnalyzer:
         return round(min(total_score, 100), 1)
 
     def _generate_recommendation(
-        self,
-        potential_score: float,
-        difficulty_score: float,
-        relevance_score: float
+        self, potential_score: float, difficulty_score: float, relevance_score: float
     ) -> str:
         """Generate actionable recommendation for keyword."""
         if relevance_score < 0.5:
@@ -366,14 +353,12 @@ class KeywordAnalyzer:
         self,
         primary_keywords: List[Dict[str, Any]],
         secondary_keywords: List[Dict[str, Any]],
-        long_tail_keywords: List[Dict[str, Any]]
+        long_tail_keywords: List[Dict[str, Any]],
     ) -> str:
         """Generate summary of keyword comparison."""
         summary_parts = []
 
-        summary_parts.append(
-            f"Identified {len(primary_keywords)} high-priority primary keywords."
-        )
+        summary_parts.append(f"Identified {len(primary_keywords)} high-priority primary keywords.")
 
         if primary_keywords:
             top_keyword = primary_keywords[0]['keyword']
