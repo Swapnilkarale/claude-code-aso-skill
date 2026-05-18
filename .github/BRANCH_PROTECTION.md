@@ -50,6 +50,25 @@ creates these branches automatically when an issue is labelled `ready`.
 Configure these once in **Settings → Branches** (or via `gh api`). The CI status
 check names below match the workflow job names exactly.
 
+## One-time repository settings
+
+Before the automation can work end-to-end, two repository-level toggles must
+be flipped (these cannot be set from a workflow):
+
+1. **Settings → Actions → General → Workflow permissions**
+   - Set to **"Read and write permissions"**
+   - Tick **"Allow GitHub Actions to create and approve pull requests"**
+
+   Without this, `auto-pr-dev.yml` and `auto-pr-main.yml` will fail with
+   `GitHub Actions is not permitted to create or approve pull requests`,
+   even though the workflows themselves declare `pull-requests: write`.
+
+2. **Settings → Actions → General → Fork pull request workflows from outside
+   collaborators** — set to **"Require approval for first-time contributors"**
+   (default is fine). Workflows that need a write token (auto-rebase,
+   auto-PR) intentionally skip fork branches in `branch-lifecycle.yml`, so
+   this is mainly belt-and-braces.
+
 ### `main` (protected, release branch)
 
 - Require a pull request before merging
