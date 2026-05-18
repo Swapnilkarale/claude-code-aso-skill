@@ -1,18 +1,25 @@
 name: Security Scanning
 
+# Runs on every PR to dev/main and on pushes to those branches.
+# Plus a weekly scheduled scan.
+
 on:
   pull_request:
     branches: [dev, main]
   push:
     branches: [dev, main]
   schedule:
-    # Run weekly on Mondays at 00:00 UTC
-    - cron: '0 0 * * 1'
+    - cron: '0 0 * * 1'  # Mondays at 00:00 UTC
 
 permissions:
   contents: read
   security-events: write
   actions: read
+  pull-requests: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   codeql-analysis:
@@ -32,7 +39,7 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:python"
+          category: '/language:python'
 
   secret-scanning:
     name: Secret Scanning
@@ -45,30 +52,42 @@ jobs:
           fetch-depth: 0  # Full history for comprehensive scanning
 
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.82.6
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
           head: HEAD
           extra_args: --only-verified
 
-      - name: Check for hardcoded credentials
+      - name: Heuristic credential pattern check
         run: |
+          set -u
           echo "Checking for common credential patterns..."
 
-          # Check for API keys
-          if grep -rE "(api[_-]?key|apikey|api[_-]?secret)" --include="*.py" --include="*.yml" --include="*.yaml" app-store-optimization/ .github/ scripts/ 2>/dev/null | grep -v "# " | grep -v "PLACEHOLDER" | grep -v "YOUR_API_KEY"; then
-            echo "⚠️  WARNING: Potential API key references found"
-            echo "Please verify these are not hardcoded credentials"
-          fi
+          # Allowed mentions (placeholders / env-var references / approved env names)
+          ALLOW='(PLACEHOLDER|YOUR_API_KEY|YOUR_TOKEN|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_API_KEY|GITHUB_TOKEN|secrets\.|os\.environ|getenv|getEnv)'
 
-          # Check for tokens
-          if grep -rE "(token|bearer|oauth)" --include="*.py" --include="*.yml" app-store-optimization/ .github/ scripts/ 2>/dev/null | grep -v "# " | grep -v "PLACEHOLDER" | grep -v "YOUR_TOKEN" | grep -v "CLAUDE_CODE_OAUTH_TOKEN" | grep -v "CLAUDE_API_KEY"; then
-            echo "⚠️  WARNING: Potential token references found"
-            echo "Please verify these are references to environment variables, not hardcoded values"
-          fi
+          FOUND_KEYS=$(grep -rIE "(api[_-]?key|apikey|api[_-]?secret)" \
+            --include="*.py" --include="*.yml" --include="*.yaml" \
+            app-store-optimization/ .github/ scripts/ 2>/dev/null \
+            | grep -vE "^[^:]+:[[:space:]]*#" \
+            | grep -vE "$ALLOW" || true)
 
-          echo "✅ Secret scanning completed"
+          FOUND_TOKENS=$(grep -rIE "(token|bearer|oauth)" \
+            --include="*.py" --include="*.yml" --include="*.yaml" \
+            app-store-optimization/ .github/ scripts/ 2>/dev/null \
+            | grep -vE "^[^:]+:[[:space:]]*#" \
+            | grep -vE "$ALLOW" || true)
+
+          if [ -n "$FOUND_KEYS" ]; then
+            echo "WARNING: potential API key references found (review manually):"
+            echo "$FOUND_KEYS"
+          fi
+          if [ -n "$FOUND_TOKENS" ]; then
+            echo "WARNING: potential token references found (review manually):"
+            echo "$FOUND_TOKENS"
+          fi
+          echo "Heuristic scan completed."
 
   dependency-security:
     name: Dependency Security Check
@@ -83,46 +102,40 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Check for dependency files
-        id: check-deps
+      - name: Install pip-audit
+        if: hashFiles('requirements.txt') != ''
         run: |
-          if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
-            echo "has_deps=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_deps=false" >> $GITHUB_OUTPUT
-          fi
+          python -m pip install --upgrade pip
+          pip install 'pip-audit==2.7.3'
 
-      - name: Install safety
-        if: steps.check-deps.outputs.has_deps == 'true'
-        run: pip install safety
+      - name: Audit requirements.txt
+        if: hashFiles('requirements.txt') != ''
+        run: pip-audit --requirement requirements.txt --strict
 
-      - name: Run safety check
-        if: steps.check-deps.outputs.has_deps == 'true'
+      - name: No runtime dependencies notice
+        if: hashFiles('requirements.txt') == ''
+        run: echo "No requirements.txt present; ASO skill is stdlib-only and has no runtime dependencies to audit."
+
+      - name: Validate no external runtime dependencies
         run: |
-          if [ -f "requirements.txt" ]; then
-            safety check --file requirements.txt
-          else
-            echo "✅ No requirements.txt found, skipping safety check"
-          fi
-
-      - name: Validate no external dependencies
-        run: |
+          set -u
           echo "Validating ASO skill uses only Python standard library..."
 
-          # Check for import statements that might indicate external deps
-          external_imports=$(grep -rh "^import\|^from" app-store-optimization/*.py | \
-            grep -v "^import \(typing\|re\|collections\|json\|urllib\|datetime\|random\|math\|statistics\|os\|sys\)" | \
-            grep -v "^from \(typing\|urllib\)" | \
-            grep -v "^from \." || true)
+          STD='^(import |from )(typing|re|collections|json|urllib|datetime|random|math|statistics|os|sys|pathlib|hashlib|functools|itertools|dataclasses|enum|copy|time|argparse|logging|tempfile|subprocess|shutil|contextlib|warnings|csv|html|http|io|inspect)( |\.|$)'
 
-          if [ -n "$external_imports" ]; then
-            echo "⚠️  WARNING: Potential external dependencies found:"
-            echo "$external_imports"
-            echo ""
-            echo "ASO skill should use only Python standard library"
-            echo "If these are standard library imports, please update this check"
+          EXTERNAL=$(grep -rhE "^(import |from )" app-store-optimization/ \
+            --include="*.py" 2>/dev/null \
+            | grep -vE "$STD" \
+            | grep -vE "^from \." || true)
+
+          if [ -n "$EXTERNAL" ]; then
+            echo "WARNING: potential external runtime imports detected:"
+            echo "$EXTERNAL"
+            echo
+            echo "The ASO skill is stdlib-only. If these are valid stdlib imports,"
+            echo "add them to the allowlist in .github/workflows/security.yml."
           else
-            echo "✅ No external dependencies detected"
+            echo "No external runtime dependencies detected."
           fi
 
   security-summary:
@@ -132,22 +145,18 @@ jobs:
     if: always()
 
     steps:
-      - name: Check security status
+      - name: Aggregate results
+        env:
+          CODEQL: ${{ needs.codeql-analysis.result }}
+          SECRETS: ${{ needs.secret-scanning.result }}
+          DEPS: ${{ needs.dependency-security.result }}
         run: |
-          codeql_status="${{ needs.codeql-analysis.result }}"
-          secret_status="${{ needs.secret-scanning.result }}"
-          deps_status="${{ needs.dependency-security.result }}"
-
-          echo "Security Scan Results:"
-          echo "- CodeQL Analysis: $codeql_status"
-          echo "- Secret Scanning: $secret_status"
-          echo "- Dependency Security: $deps_status"
-          echo ""
-
-          if [ "$codeql_status" == "success" ] && [ "$secret_status" == "success" ] && [ "$deps_status" == "success" ]; then
-            echo "✅ All security checks passed"
+          echo "CodeQL:           $CODEQL"
+          echo "Secret scanning:  $SECRETS"
+          echo "Dependency audit: $DEPS"
+          if [ "$CODEQL" = success ] && [ "$SECRETS" = success ] && [ "$DEPS" = success ]; then
+            echo "All security checks passed."
             exit 0
-          else
-            echo "❌ Security checks failed - please review above"
-            exit 1
           fi
+          echo "One or more security checks failed."
+          exit 1

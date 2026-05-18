@@ -1,5 +1,7 @@
 name: Wiki Sync
 
+# Mirrors selected documentation from main into the GitHub wiki.
+
 on:
   push:
     branches: [main]
@@ -11,10 +13,15 @@ on:
       - 'documentation/**'
       - 'app-store-optimization/**/*.py'
       - '.github/workflows/wiki-sync.yml'
+      - 'scripts/generate-wiki-content.py'
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: false
 
 jobs:
   sync-wiki:
@@ -34,6 +41,7 @@ jobs:
           repository: ${{ github.repository }}.wiki
           path: wiki
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,155 +50,155 @@ jobs:
 
       - name: Generate wiki content
         run: |
-          python scripts/generate-wiki-content.py
+          if [ -f scripts/generate-wiki-content.py ]; then
+            python scripts/generate-wiki-content.py
+          else
+            echo "No wiki generator script found; skipping."
+          fi
 
-      - name: Copy generated wiki files
+      - name: Assemble wiki files
+        env:
+          PROJECT_VERSION: ${{ vars.PROJECT_VERSION || '1.0.0' }}
         run: |
-          # Copy generated files to wiki
-          cp -f /tmp/wiki/*.md wiki/ 2>/dev/null || echo "No wiki files generated yet"
+          set -e
+          mkdir -p wiki
 
-          # Create wiki homepage
-          cat > wiki/Home.md << 'EOF'
-# ASO Skill Wiki
+          if compgen -G "/tmp/wiki/*.md" > /dev/null; then
+            cp -f /tmp/wiki/*.md wiki/
+          fi
 
-Welcome to the comprehensive ASO (App Store Optimization) Skill documentation!
+          UPDATED="$(date +"%B %d, %Y")"
 
-## Quick Navigation
+          cat > wiki/Home.md <<EOF
+          # ASO Skill Wiki
 
-### Getting Started
-- [Installation Guide](Installation)
-- [Quick Start](Quick-Start)
-- [Configuration](Configuration)
+          Welcome to the comprehensive ASO (App Store Optimization) Skill documentation.
 
-### Core Features
-- [Keyword Analysis](Keyword-Analysis)
-- [Metadata Optimization](Metadata-Optimization)
-- [Competitor Analysis](Competitor-Analysis)
-- [A/B Testing](AB-Testing)
-- [Localization](Localization)
-- [Review Analysis](Review-Analysis)
-- [Launch Planning](Launch-Planning)
+          ## Quick Navigation
 
-### ASO Agents
-- [Agent Overview](ASO-Agents)
-- [aso-master](ASO-Agent-Master)
-- [aso-research](ASO-Agent-Research)
-- [aso-optimizer](ASO-Agent-Optimizer)
-- [aso-strategist](ASO-Agent-Strategist)
+          ### Getting Started
+          - [Installation Guide](Installation)
+          - [Quick Start](Quick-Start)
+          - [Configuration](Configuration)
 
-### Reference
-- [API Documentation](API-Reference)
-- [Platform Constraints](Platform-Constraints)
-- [Character Limits](Character-Limits)
+          ### Core Features
+          - [Keyword Analysis](Keyword-Analysis)
+          - [Metadata Optimization](Metadata-Optimization)
+          - [Competitor Analysis](Competitor-Analysis)
+          - [A/B Testing](AB-Testing)
+          - [Localization](Localization)
+          - [Review Analysis](Review-Analysis)
+          - [Launch Planning](Launch-Planning)
 
-### Project
-- [Release History](Release-History)
-- [Roadmap](Roadmap)
-- [Contributing](Contributing)
-- [FAQ](FAQ)
+          ### ASO Agents
+          - [Agent Overview](ASO-Agents)
+          - [aso-master](ASO-Agent-Master)
+          - [aso-research](ASO-Agent-Research)
+          - [aso-optimizer](ASO-Agent-Optimizer)
+          - [aso-strategist](ASO-Agent-Strategist)
 
----
+          ### Reference
+          - [API Documentation](API-Reference)
+          - [Platform Constraints](Platform-Constraints)
+          - [Character Limits](Character-Limits)
 
-**Version:** 1.0.0 | **Updated:** $(date +"%B %d, %Y")
+          ### Project
+          - [Release History](Release-History)
+          - [Roadmap](Roadmap)
+          - [Contributing](Contributing)
+          - [FAQ](FAQ)
+
+          ---
+
+          **Version:** ${PROJECT_VERSION} | **Updated:** ${UPDATED}
           EOF
 
-          # Extract sections from README for Installation and Quick Start
-          sed -n '/## Installation/,/## Usage/p' README.md | sed '$ d' > wiki/Installation.md
-          sed -n '/## Quick Start/,/## Features/p' README.md | sed '$ d' > wiki/Quick-Start.md
+          # Extract sections from README defensively
+          if [ -f README.md ]; then
+            awk '/^## Installation/{flag=1} flag; /^## Usage/{flag=0}' README.md \
+              | sed '$d' > wiki/Installation.md || true
+            awk '/^## Quick Start/{flag=1} flag; /^## Features/{flag=0}' README.md \
+              | sed '$d' > wiki/Quick-Start.md || true
+          fi
 
-          # Copy CHANGELOG as Release History
-          cp CHANGELOG.md wiki/Release-History.md
+          [ -f CHANGELOG.md ] && cp CHANGELOG.md wiki/Release-History.md || true
+          [ -f PROJECT-STATUS.md ] && cp PROJECT-STATUS.md wiki/Roadmap.md || true
+          [ -f .github/CONTRIBUTING.md ] && cp .github/CONTRIBUTING.md wiki/Contributing.md || true
 
-          # Copy PROJECT-STATUS as Roadmap
-          cp PROJECT-STATUS.md wiki/Roadmap.md
+          cat > wiki/Platform-Constraints.md <<EOF
+          # Platform Constraints
 
-          # Copy CONTRIBUTING
-          cp .github/CONTRIBUTING.md wiki/Contributing.md
+          ## Character Limit Reference
 
-          # Create Platform Constraints page
-          cat > wiki/Platform-Constraints.md << 'EOF'
-# Platform Constraints
+          ### Apple App Store
 
-## Character Limit Reference
+          | Field            | Limit          | Notes                                |
+          |------------------|----------------|--------------------------------------|
+          | Title            | 30 characters  | Critical for visibility              |
+          | Subtitle         | 30 characters  | Displays under app name              |
+          | Promotional Text | 170 characters | Can update without new version       |
+          | Description      | 4000 characters| Not indexed for search               |
+          | Keywords         | 100 characters | Comma-separated, no spaces           |
 
-### Apple App Store
+          ### Google Play Store
 
-| Field | Limit | Notes |
-|-------|-------|-------|
-| Title | 30 characters | Critical for visibility |
-| Subtitle | 30 characters | Displays under app name |
-| Promotional Text | 170 characters | Can update without new version |
-| Description | 4000 characters | Not indexed for search |
-| Keywords | 100 characters | Comma-separated, no spaces |
+          | Field             | Limit          | Notes                            |
+          |-------------------|----------------|----------------------------------|
+          | Title             | 50 characters  | Indexed for search               |
+          | Short Description | 80 characters  | First thing users see            |
+          | Full Description  | 4000 characters| Indexed for search               |
+          | Keywords          | N/A            | Extracted from title/description |
 
-### Google Play Store
+          ## Best Practices
 
-| Field | Limit | Notes |
-|-------|-------|-------|
-| Title | 50 characters | Indexed for search |
-| Short Description | 80 characters | First thing users see |
-| Full Description | 4000 characters | Indexed for search |
-| Keywords | N/A | Extracted from title/description |
+          ### Apple App Store
+          - Use all 100 characters for keywords
+          - No spaces after commas in keyword field
+          - Keywords not in title/subtitle still count
+          - Test with App Store Connect preview
 
-## Best Practices
+          ### Google Play Store
+          - Front-load important keywords in title
+          - Use the 80-character short description wisely
+          - Include keywords naturally in full description
+          - No keyword stuffing (penalized)
 
-### Apple App Store
-- Use all 100 characters for keywords
-- No spaces after commas in keyword field
-- Keywords not in title/subtitle still count
-- Test with App Store Connect preview
-
-### Google Play Store
-- Front-load important keywords in title
-- Use short description wisely (80 chars)
-- Include keywords naturally in full description
-- No keyword stuffing (penalized)
-
-## Validation
-
-All ASO skill modules automatically validate character limits:
-
-```python
-from app-store-optimization.metadata_optimizer import optimize_title
-
-# Automatically truncates/optimizes to platform limit
-title = optimize_title("My Super Long App Name", platform="apple", max_length=30)
-```
-
-**Last Updated:** $(date +"%B %d, %Y")
+          **Last Updated:** ${UPDATED}
           EOF
 
-          echo "✅ Wiki content prepared"
+          echo "Wiki content prepared."
 
       - name: Commit and push to wiki
         working-directory: wiki
+        env:
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add .
-
           if git diff --staged --quiet; then
-            echo "No changes to wiki"
+            echo "No wiki changes to commit."
           else
-            git commit -m "Auto-sync from main branch: ${{ github.sha }}"
+            git commit -m "Auto-sync from main: ${COMMIT_SHA}"
             git push
-            echo "✅ Wiki updated successfully"
+            echo "Wiki updated successfully."
           fi
 
       - name: Summary
         run: |
-          echo "## Wiki Sync Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Updated wiki from main branch push." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Files synced:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Home.md (generated)" >> $GITHUB_STEP_SUMMARY
-          echo "- Installation.md (from README)" >> $GITHUB_STEP_SUMMARY
-          echo "- Quick-Start.md (from README)" >> $GITHUB_STEP_SUMMARY
-          echo "- Release-History.md (from CHANGELOG)" >> $GITHUB_STEP_SUMMARY
-          echo "- Roadmap.md (from PROJECT-STATUS)" >> $GITHUB_STEP_SUMMARY
-          echo "- Contributing.md (from .github/CONTRIBUTING)" >> $GITHUB_STEP_SUMMARY
-          echo "- Platform-Constraints.md (generated)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Wiki URL:** https://github.com/${{ github.repository }}/wiki" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Wiki Sync Complete"
+            echo
+            echo "Updated wiki from main branch push."
+            echo
+            echo "**Files synced:**"
+            echo "- Home.md (generated)"
+            echo "- Installation.md (from README)"
+            echo "- Quick-Start.md (from README)"
+            echo "- Release-History.md (from CHANGELOG)"
+            echo "- Roadmap.md (from PROJECT-STATUS)"
+            echo "- Contributing.md (from .github/CONTRIBUTING)"
+            echo "- Platform-Constraints.md (generated)"
+            echo
+            echo "**Wiki URL:** https://github.com/${{ github.repository }}/wiki"
+          } >> "$GITHUB_STEP_SUMMARY"

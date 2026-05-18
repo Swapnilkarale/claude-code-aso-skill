@@ -1,36 +1,36 @@
-name: Auto-Create PR to Main
+name: Auto-Create Release PR (dev to main)
+
+# Branching strategy enforcement: only `dev` may merge into `main`.
+# This workflow is manually triggered to cut a release PR.
 
 on:
   workflow_dispatch:
     inputs:
       release_type:
-        description: 'Release type'
+        description: 'Release type (semver bump)'
         required: true
         type: choice
+        default: 'patch'
         options:
           - patch
           - minor
           - major
-  # Optionally trigger automatically after successful merge to dev
-  # pull_request:
-  #   types: [closed]
-  #   branches: [dev]
 
 permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: auto-pr-main
+  cancel-in-progress: false
+
 jobs:
   create-release-pr:
-    name: Create Release PR (dev → main)
+    name: Create Release PR (dev to main)
     runs-on: ubuntu-latest
-    # Only run on workflow_dispatch or when PR to dev is merged
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'dev')
 
     steps:
-      - name: Checkout code
+      - name: Checkout dev
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -39,26 +39,25 @@ jobs:
       - name: Check for changes since last release
         id: check-changes
         run: |
-          # Get last release tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)"
+          echo "Last release tag: $LAST_TAG"
 
-          echo "Last release: $LAST_TAG"
-
-          # Check if there are commits since last tag
-          COMMITS_SINCE=$(git rev-list ${LAST_TAG}..HEAD --count 2>/dev/null || git rev-list HEAD --count)
-
-          echo "Commits since last release: $COMMITS_SINCE"
+          if git rev-parse "$LAST_TAG" >/dev/null 2>&1; then
+            COMMITS_SINCE="$(git rev-list "${LAST_TAG}"..HEAD --count)"
+          else
+            COMMITS_SINCE="$(git rev-list HEAD --count)"
+          fi
+          echo "Commits since release: $COMMITS_SINCE"
 
           if [ "$COMMITS_SINCE" -eq 0 ]; then
-            echo "No changes since last release"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "commits_count=$COMMITS_SINCE" >> $GITHUB_OUTPUT
-            echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "commits_count=$COMMITS_SINCE" >> "$GITHUB_OUTPUT"
+            echo "last_tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check if PR already exists
+      - name: Check if release PR already exists
         id: check-pr
         if: steps.check-changes.outputs.has_changes == 'true'
         uses: actions/github-script@v7
@@ -71,168 +70,112 @@ jobs:
               base: 'main',
               state: 'open',
             });
-
             if (pulls.length > 0) {
-              console.log(`Release PR already exists: #${pulls[0].number}`);
               core.setOutput('pr_exists', 'true');
-              core.setOutput('pr_number', pulls[0].number);
+              core.setOutput('pr_number', String(pulls[0].number));
+              core.setOutput('pr_url', pulls[0].html_url);
             } else {
-              console.log('No existing release PR found');
               core.setOutput('pr_exists', 'false');
             }
 
-      - name: Extract CHANGELOG unreleased
-        id: extract-changelog
-        if: steps.check-changes.outputs.has_changes == 'true' && steps.check-pr.outputs.pr_exists == 'false'
-        run: |
-          # Extract unreleased section from CHANGELOG.md
-          if [ -f "CHANGELOG.md" ]; then
-            # Get content between [Unreleased] and next version
-            UNRELEASED=$(sed -n '/## \[Unreleased\]/,/## \[/p' CHANGELOG.md | sed '1d;$d')
-
-            if [ -n "$UNRELEASED" ]; then
-              echo "Found unreleased changes in CHANGELOG.md"
-              echo "$UNRELEASED" > /tmp/changelog-unreleased.txt
-              echo "has_changelog=true" >> $GITHUB_OUTPUT
-            else
-              echo "No unreleased section in CHANGELOG.md"
-              echo "has_changelog=false" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "CHANGELOG.md not found"
-            echo "has_changelog=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Get commit log since last release
-        id: get-commits
-        if: steps.check-changes.outputs.has_changes == 'true' && steps.check-pr.outputs.pr_exists == 'false'
-        run: |
-          LAST_TAG="${{ steps.check-changes.outputs.last_tag }}"
-
-          # Get commits since last tag
-          git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" > /tmp/commits.txt
-
-          echo "Commits since $LAST_TAG:"
-          cat /tmp/commits.txt
-
-      - name: Create PR body
-        id: create-body
-        if: steps.check-changes.outputs.has_changes == 'true' && steps.check-pr.outputs.pr_exists == 'false'
-        run: |
-          COMMITS_COUNT="${{ steps.check-changes.outputs.commits_count }}"
-          LAST_TAG="${{ steps.check-changes.outputs.last_tag }}"
-
-          # Build PR body
-          cat > /tmp/pr-body.txt << 'EOFBODY'
-## Release PR: dev → main
-
-This PR includes **COMMITS_COUNT** commits ready for release.
-
-EOFBODY
-
-          # Replace placeholder
-          sed -i "s/COMMITS_COUNT/$COMMITS_COUNT/g" /tmp/pr-body.txt
-
-          # Add changelog if available
-          if [ "${{ steps.extract-changelog.outputs.has_changelog }}" == "true" ]; then
-            cat >> /tmp/pr-body.txt << 'EOFCHANGELOG'
-
-## Changes
-
-EOFCHANGELOG
-            cat /tmp/changelog-unreleased.txt >> /tmp/pr-body.txt
-          else
-            # Use commit log
-            cat >> /tmp/pr-body.txt << 'EOFCOMMITS'
-
-## Commits Since LAST_TAG
-
-EOFCOMMITS
-            sed -i "s/LAST_TAG/$LAST_TAG/g" /tmp/pr-body.txt
-            cat /tmp/commits.txt >> /tmp/pr-body.txt
-          fi
-
-          # Add pre-merge checklist
-          cat >> /tmp/pr-body.txt << 'EOFCHECKLIST'
-
-
-## Pre-Release Checklist
-
-- [ ] CHANGELOG.md updated with version number
-- [ ] Version bumped in pyproject.toml (if exists)
-- [ ] All quality checks passed on dev
-- [ ] README.md reflects latest changes
-- [ ] Breaking changes documented
-- [ ] Migration guide provided (if breaking changes)
-
-## Post-Merge Actions
-
-After merging this PR:
-- GitHub Release will be created automatically
-- Wiki will be updated automatically
-- Distribution package will be rebuilt
-
----
-
-**⚠️ This PR will be reviewed by Claude agent for final validation.**
-EOFCHECKLIST
-
-          echo "PR body created"
-
-      - name: Determine next version
+      - name: Compute next version
         id: next-version
         if: steps.check-changes.outputs.has_changes == 'true' && steps.check-pr.outputs.pr_exists == 'false'
+        env:
+          LAST_TAG: ${{ steps.check-changes.outputs.last_tag }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
         run: |
-          LAST_TAG="${{ steps.check-changes.outputs.last_tag }}"
-          RELEASE_TYPE="${{ github.event.inputs.release_type || 'patch' }}"
-
-          # Remove 'v' prefix if present
           LAST_VERSION="${LAST_TAG#v}"
-
-          # Parse version
           IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VERSION"
+          MAJOR=${MAJOR:-0}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
 
-          # Increment based on release type
-          case $RELEASE_TYPE in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
+          case "$RELEASE_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "Unknown release type: $RELEASE_TYPE" >&2; exit 1 ;;
           esac
 
           NEXT_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
           echo "Next version: $NEXT_VERSION"
 
-      - name: Create pull request
+      - name: Build PR body
+        id: build-body
+        if: steps.check-changes.outputs.has_changes == 'true' && steps.check-pr.outputs.pr_exists == 'false'
+        env:
+          COMMITS_COUNT: ${{ steps.check-changes.outputs.commits_count }}
+          LAST_TAG: ${{ steps.check-changes.outputs.last_tag }}
+          NEXT_VERSION: ${{ steps.next-version.outputs.next_version }}
+        run: |
+          BODY_FILE="$(mktemp)"
+          {
+            echo "## Release PR: dev to main"
+            echo
+            echo "This PR promotes \`dev\` to \`main\` for release **${NEXT_VERSION}**."
+            echo "It bundles **${COMMITS_COUNT}** commit(s) since \`${LAST_TAG}\`."
+            echo
+          } > "$BODY_FILE"
+
+          if [ -f CHANGELOG.md ]; then
+            UNRELEASED="$(awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md | sed -e 's/[[:space:]]*$//')"
+            if [ -n "$UNRELEASED" ]; then
+              {
+                echo "## Changes"
+                echo
+                echo "$UNRELEASED"
+                echo
+              } >> "$BODY_FILE"
+            fi
+          fi
+
+          {
+            echo "## Commits since ${LAST_TAG}"
+            echo
+            if git rev-parse "$LAST_TAG" >/dev/null 2>&1; then
+              git log "${LAST_TAG}..HEAD" --pretty=format:"- %s (%h)"
+            else
+              git log --pretty=format:"- %s (%h)"
+            fi
+            echo
+            echo
+            echo "## Pre-Release Checklist"
+            echo
+            echo "- [ ] CHANGELOG.md updated with version ${NEXT_VERSION#v}"
+            echo "- [ ] Version bumped in pyproject.toml"
+            echo "- [ ] All quality + security checks green on dev"
+            echo "- [ ] README updated for any user-facing change"
+            echo "- [ ] Breaking changes documented + migration notes"
+            echo
+            echo "## Post-Merge Automation"
+            echo
+            echo "After merge to main, the \`release\` workflow will:"
+            echo "- Build and publish the skill ZIP artifact"
+            echo "- Tag and create a GitHub Release for ${NEXT_VERSION}"
+            echo "- Sync the wiki"
+          } >> "$BODY_FILE"
+
+          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create release pull request
         if: steps.check-changes.outputs.has_changes == 'true' && steps.check-pr.outputs.pr_exists == 'false'
         uses: actions/github-script@v7
+        env:
+          NEXT_VERSION: ${{ steps.next-version.outputs.next_version }}
+          BODY_FILE: ${{ steps.build-body.outputs.body_file }}
         with:
           script: |
             const fs = require('fs');
-            const nextVersion = '${{ steps.next-version.outputs.next_version }}';
-            const body = fs.readFileSync('/tmp/pr-body.txt', 'utf8');
-
+            const body = fs.readFileSync(process.env.BODY_FILE, 'utf8');
             const { data: pr } = await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Release ${nextVersion}`,
-              body: body,
+              title: `Release ${process.env.NEXT_VERSION}`,
+              body,
               head: 'dev',
               base: 'main',
             });
-
-            console.log(`Created release PR #${pr.number}: ${pr.html_url}`);
-
-            // Add release label
+            core.info(`Created release PR #${pr.number}: ${pr.html_url}`);
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -240,11 +183,13 @@ EOFCHECKLIST
               labels: ['release'],
             });
 
-            core.setOutput('pr_number', pr.number);
-            core.setOutput('pr_url', pr.html_url);
-
-      - name: No changes to release
-        if: steps.check-changes.outputs.has_changes == 'false'
+      - name: Existing PR notice
+        if: steps.check-pr.outputs.pr_exists == 'true'
+        env:
+          PR_URL: ${{ steps.check-pr.outputs.pr_url }}
         run: |
-          echo "ℹ️  No changes to release since last tag"
-          echo "dev branch is up-to-date with last release"
+          echo "Release PR already open: $PR_URL"
+
+      - name: No changes notice
+        if: steps.check-changes.outputs.has_changes == 'false'
+        run: echo "Nothing to release; dev is at the last tag."
