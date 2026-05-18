@@ -1,0 +1,35 @@
+name: Sync Labels
+
+# Keeps the repository's labels in sync with .github/labels.yml.
+# Runs on changes to the manifest and can be triggered manually.
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - '.github/labels.yml'
+      - '.github/workflows/labels.yml'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: labels-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync labels from manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync labels
+        uses: EndBug/label-sync@v2
+        with:
+          config-file: .github/labels.yml
+          # Keep manually-added labels; this workflow only owns what's in the manifest.
+          delete-other-labels: false

@@ -1,18 +1,65 @@
 name: Claude Main Branch Check
 
+# Final release validation: enforces dev to main rule and runs a minimal
+# Claude check before merging into main.
+
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
     branches: [main]
 
 permissions:
   contents: read
   pull-requests: write
   issues: read
+  id-token: write
+
+concurrency:
+  group: claude-main-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  main-check:
+  enforce-source-branch:
+    name: Enforce dev to main rule
+    runs-on: ubuntu-latest
+    outputs:
+      is_from_dev: ${{ steps.check.outputs.is_from_dev }}
+    steps:
+      - name: Check source branch
+        id: check
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const headRef = process.env.HEAD_REF;
+            const isFromDev = headRef === 'dev';
+            core.setOutput('is_from_dev', String(isFromDev));
+            if (!isFromDev) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: [
+                  '**Invalid PR source**',
+                  '',
+                  'PRs to `main` must come from the `dev` branch only.',
+                  '',
+                  `Current source: \`${headRef}\``,
+                  '',
+                  'Please:',
+                  '1. Close this PR',
+                  '2. Merge your changes into `dev` first',
+                  '3. Use the `Auto-Create Release PR (dev to main)` workflow',
+                ].join('\n'),
+              });
+              core.setFailed(`PRs to main must come from 'dev'. Got: ${headRef}`);
+            }
+
+  claude-release-validation:
     name: Claude Release Validation
+    needs: enforce-source-branch
+    if: needs.enforce-source-branch.outputs.is_from_dev == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -21,39 +68,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR details
-        id: pr-details
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = context.payload.pull_request;
-
-            // Check if this is from dev branch
-            const isFromDev = pr.head.ref === 'dev';
-            core.setOutput('is_from_dev', isFromDev);
-
-            if (!isFromDev) {
-              core.setOutput('error', `PRs to main must come from dev branch. Current head: ${pr.head.ref}`);
-            }
-
-      - name: Block non-dev PRs
-        if: steps.pr-details.outputs.is_from_dev == 'false'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = context.payload.pull_request;
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              body: `❌ **Invalid PR Source**\n\nPRs to \`main\` must come from the \`dev\` branch only.\n\n**Current source:** \`${pr.head.ref}\`\n\nPlease:\n1. Close this PR\n2. Merge your changes to \`dev\` first\n3. Create a release PR from \`dev\` to \`main\``,
-            });
-
-            core.setFailed('${{ steps.pr-details.outputs.error }}');
-
-      - name: Run Claude minimal check
-        if: steps.pr-details.outputs.is_from_dev == 'true'
+      - name: Run Claude minimal release check
         id: claude-check
         uses: anthropics/claude-code-action@v1
         with:
@@ -62,79 +77,49 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            This is a RELEASE PR from dev → main. Perform a MINIMAL final validation:
+            This is a RELEASE PR from dev to main. Perform a MINIMAL final validation
+            (heavy review already happened on dev). Focus only on release-readiness:
 
-            **Critical Checks Only:**
+            1. CHANGELOG.md
+               - Is CHANGELOG.md updated with a new version section?
+               - Has the [Unreleased] content been moved into a versioned section?
+               - Does the version follow semver (MAJOR.MINOR.PATCH)?
 
-            1. **CHANGELOG.md:**
-               - Is CHANGELOG.md updated with new version?
-               - Does [Unreleased] section have content moved to a versioned section?
-               - Is the version number following semver (MAJOR.MINOR.PATCH)?
+            2. Version consistency
+               - Does pyproject.toml version match the CHANGELOG version?
 
-            2. **Version Consistency:**
-               - If pyproject.toml exists, is version bumped?
-               - Does version in CHANGELOG match version in pyproject.toml?
+            3. Breaking changes
+               - Documented? Migration notes provided when needed?
 
-            3. **Breaking Changes:**
-               - Are breaking changes clearly documented?
-               - Is migration guide provided if needed?
+            4. Quality gates
+               - Use `gh pr view ${{ github.event.pull_request.number }} --json statusCheckRollup`
+                 to confirm dev-side checks were green.
 
-            4. **Quality Gates:**
-               - Did all dev branch quality checks pass?
-               - Use `gh pr view ${{ github.event.pull_request.number }} --json statusCheckRollup` to verify
+            Do NOT re-review code or re-run security scans.
 
-            **DO NOT:**
-            - Re-review code (already reviewed on dev)
-            - Check for bugs (already tested on dev)
-            - Perform security scans (already done on dev)
-            - Review individual commits (trust dev validation)
+            Reply with one of:
+            - `Release validation passed - ready to merge`
+            - `Release validation failed: <reasons>`
 
-            **Response Format:**
-            If checks pass:
-            ```
-            ✅ Release validation passed
-            - CHANGELOG.md: ✅ Updated with version X.Y.Z
-            - Version consistency: ✅ Matches across files
-            - Breaking changes: ✅ Documented / ⚠️ None found
-            - Quality gates: ✅ All passed on dev
+            Use `gh pr comment` to post your verdict.
 
-            **Recommendation:** APPROVE for merge
-            ```
-
-            If checks fail:
-            ```
-            ❌ Release validation failed
-            - Issue 1: Description
-            - Issue 2: Description
-
-            **Recommendation:** REQUEST CHANGES
-            ```
-
-            Use `gh pr review` with your Bash tool to approve or request changes.
-
-          claude_args: '--allowed-tools "Bash(gh *)"'
+          claude_args: '--allowed-tools "Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr list:*)"'
 
       - name: Validation summary
         if: always()
         uses: actions/github-script@v7
+        env:
+          CHECK_OUTCOME: ${{ steps.claude-check.outcome }}
         with:
           script: |
-            const pr = context.payload.pull_request;
-            const checkStatus = '${{ steps.claude-check.outcome }}';
-
-            let emoji = '✅';
-            let status = 'passed';
-            let message = 'Claude release validation completed successfully.';
-
-            if (checkStatus !== 'success') {
-              emoji = '⚠️';
-              status = 'completed with warnings';
-              message = 'Claude release validation completed. Please review feedback above.';
-            }
-
+            const outcome = process.env.CHECK_OUTCOME;
+            const passed = outcome === 'success';
+            const body = passed
+              ? 'Claude release validation completed successfully. Heavy review already passed on `dev`; this was a minimal final gate.'
+              : 'Claude release validation completed with warnings. Please review feedback above before merging.';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: pr.number,
-              body: `${emoji} **Claude Main Branch Check ${status}**\n\n${message}\n\nThis is a minimal final validation before release. Most quality checks were already performed on the \`dev\` branch.`,
+              issue_number: context.payload.pull_request.number,
+              body,
             });
