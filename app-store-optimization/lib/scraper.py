@@ -6,7 +6,7 @@ Note: This module is designed to be used by ASO agents, not run standalone.
 Agents have access to the WebFetch tool which handles the actual HTTP requests.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict
 
 
 class WebFetchPrompts:
@@ -42,10 +42,7 @@ class WebFetchPrompts:
         Format as JSON array with these fields.
         """
 
-        return {
-            "url": url,
-            "prompt": prompt
-        }
+        return {"url": url, "prompt": prompt}
 
     @staticmethod
     def app_store_app_page(app_url: str) -> Dict[str, str]:
@@ -88,10 +85,7 @@ class WebFetchPrompts:
         Format as structured JSON with these fields.
         """
 
-        return {
-            "url": app_url,
-            "prompt": prompt
-        }
+        return {"url": app_url, "prompt": prompt}
 
     @staticmethod
     def play_store_search(keyword: str) -> Dict[str, str]:
@@ -120,10 +114,7 @@ class WebFetchPrompts:
         Format as JSON array with these fields.
         """
 
-        return {
-            "url": url,
-            "prompt": prompt
-        }
+        return {"url": url, "prompt": prompt}
 
     @staticmethod
     def play_store_app_page(app_url_or_package: str) -> Dict[str, str]:
@@ -174,10 +165,7 @@ class WebFetchPrompts:
         Format as structured JSON with these fields.
         """
 
-        return {
-            "url": url,
-            "prompt": prompt
-        }
+        return {"url": url, "prompt": prompt}
 
 
 class ScraperGuide:
@@ -413,7 +401,6 @@ config = WebFetchPrompts.app_store_search("productivity")
 
 # Expected output: List of 10 apps with metadata
 """,
-
         "app_page_metadata": """
 # Example: Scrape individual app page
 app_url = "https://apps.apple.com/us/app/todoist-to-do-list-tasks/id572688855"
@@ -424,7 +411,6 @@ config = WebFetchPrompts.app_store_app_page(app_url)
 
 # Expected output: Complete app metadata (title, description, rating, etc.)
 """,
-
         "competitor_analysis": """
 # Example: Scrape 3 competitors for comparison
 competitors = ["Todoist", "Any.do", "Microsoft To Do"]
@@ -443,7 +429,7 @@ for name in competitors:
     competitor_data.append(metadata)
 
 # Now pass to competitor_analyzer.py for analysis
-"""
+""",
     }
 
 

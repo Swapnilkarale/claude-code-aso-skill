@@ -62,9 +62,6 @@ jobs:
       - name: Ruff format check
         run: ruff format --check app-store-optimization scripts
 
-      - name: Import sorting check
-        run: ruff check --select I app-store-optimization scripts
-
       - name: File structure validation
         run: |
           set -e

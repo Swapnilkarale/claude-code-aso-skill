@@ -87,9 +87,7 @@ def generate_api_reference():
     """Generate API reference from ASO skill modules."""
     output = ["# API Reference\n\n"]
     output.append("Complete API documentation for all ASO skill modules.\n\n")
-    output.append(
-        f"**Last Updated:** {datetime.now().strftime('%B %d, %Y')}\n\n"
-    )
+    output.append(f"**Last Updated:** {datetime.now().strftime('%B %d, %Y')}\n\n")
 
     modules = [
         ("keyword_analyzer.py", "Keyword Analysis"),
@@ -140,8 +138,7 @@ def generate_api_reference():
                             output.append("**Parameters:**\n\n")
                             for arg in info["args"]:
                                 output.append(
-                                    f"- `{arg['name']}` ({arg['type']}): "
-                                    f"{arg['description']}\n"
+                                    f"- `{arg['name']}` ({arg['type']}): " f"{arg['description']}\n"
                                 )
                             output.append("\n")
 

@@ -25,12 +25,7 @@ class iTunesAPI:
         """
         self.country = country
 
-    def search_apps(
-        self,
-        term: str,
-        limit: int = 10,
-        entity: str = "software"
-    ) -> Dict[str, Any]:
+    def search_apps(self, term: str, limit: int = 10, entity: str = "software") -> Dict[str, Any]:
         """
         Search for apps by keyword.
 
@@ -48,12 +43,7 @@ class iTunesAPI:
             >>> for app in results['results']:
             ...     print(app['trackName'], app['averageUserRating'])
         """
-        params = {
-            "term": term,
-            "country": self.country,
-            "entity": entity,
-            "limit": limit
-        }
+        params = {"term": term, "country": self.country, "entity": entity, "limit": limit}
 
         url = f"{self.BASE_URL}?{urllib.parse.urlencode(params)}"
 
@@ -62,17 +52,9 @@ class iTunesAPI:
                 data = json.loads(response.read().decode('utf-8'))
                 return data
         except urllib.error.URLError as e:
-            return {
-                "resultCount": 0,
-                "results": [],
-                "error": f"API request failed: {str(e)}"
-            }
+            return {"resultCount": 0, "results": [], "error": f"API request failed: {str(e)}"}
         except Exception as e:
-            return {
-                "resultCount": 0,
-                "results": [],
-                "error": f"Unexpected error: {str(e)}"
-            }
+            return {"resultCount": 0, "results": [], "error": f"Unexpected error: {str(e)}"}
 
     def get_app_by_id(self, app_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -89,11 +71,7 @@ class iTunesAPI:
             >>> app = api.get_app_by_id("572688855")  # Todoist
             >>> print(app['trackName'], app['description'])
         """
-        params = {
-            "id": app_id,
-            "country": self.country,
-            "entity": "software"
-        }
+        params = {"id": app_id, "country": self.country, "entity": "software"}
 
         url = f"{self.BASE_URL}?{urllib.parse.urlencode(params)}"
 
@@ -128,11 +106,7 @@ class iTunesAPI:
             return results['results'][0]
         return None
 
-    def get_competitors(
-        self,
-        category: str,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    def get_competitors(self, category: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Get top apps in a category.
 
@@ -180,13 +154,10 @@ class iTunesAPI:
             "screenshots": app_data.get("screenshotUrls", []),
             "ipad_screenshots": app_data.get("ipadScreenshotUrls", []),
             "icon_url": app_data.get("artworkUrl512") or app_data.get("artworkUrl100"),
-            "app_store_url": app_data.get("trackViewUrl")
+            "app_store_url": app_data.get("trackViewUrl"),
         }
 
-    def compare_competitors(
-        self,
-        competitor_names: List[str]
-    ) -> List[Dict[str, Any]]:
+    def compare_competitors(self, competitor_names: List[str]) -> List[Dict[str, Any]]:
         """
         Fetch and compare multiple competitors.
 
@@ -198,11 +169,7 @@ class iTunesAPI:
 
         Example:
             >>> api = iTunesAPI()
-            >>> competitors = api.compare_competitors([
-            ...     "Todoist",
-            ...     "Any.do",
-            ...     "Microsoft To Do"
-            ... ])
+            >>> competitors = api.compare_competitors(["Todoist", "Any.do", "Microsoft To Do"])
             >>> for comp in competitors:
             ...     print(f"{comp['app_name']}: {comp['rating']} ({comp['ratings_count']} ratings)")
         """
@@ -219,10 +186,7 @@ class iTunesAPI:
         return results
 
 
-def fetch_competitor_data(
-    competitor_names: List[str],
-    country: str = "us"
-) -> List[Dict[str, Any]]:
+def fetch_competitor_data(competitor_names: List[str], country: str = "us") -> List[Dict[str, Any]]:
     """
     Convenience function to fetch competitor data.
 
@@ -248,7 +212,9 @@ def main():
 
     if results['resultCount'] > 0:
         first_app = results['results'][0]
-        print(f"  - {first_app['trackName']}: {first_app['averageUserRating']}★ ({first_app['userRatingCount']} ratings)")
+        print(
+            f"  - {first_app['trackName']}: {first_app['averageUserRating']}★ ({first_app['userRatingCount']} ratings)"
+        )
 
     # Test 2: Get specific app
     print("\nTest 2: Getting app by name...")
@@ -270,11 +236,7 @@ def main():
 
     # Test 4: Compare specific competitors
     print("\nTest 4: Comparing specific competitors...")
-    comparison = api.compare_competitors([
-        "Todoist",
-        "Any.do",
-        "Microsoft To Do"
-    ])
+    comparison = api.compare_competitors(["Todoist", "Any.do", "Microsoft To Do"])
     print(f"Compared {len(comparison)} apps:")
     for comp in comparison:
         print(f"  - {comp['app_name']}: {comp['rating']}★ ({comp['ratings_count']:,} ratings)")
