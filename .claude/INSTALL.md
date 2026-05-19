@@ -1,7 +1,7 @@
 # ASO Agent System Installation Guide
 
-**Version:** 1.0
-**Date:** November 7, 2025
+**Version:** 1.1
+**Date:** 2026-05-19
 
 ---
 
@@ -438,6 +438,6 @@ After installation:
 
 ---
 
-**Installation Guide Version:** 1.0
-**Last Updated:** November 7, 2025
+**Installation Guide Version:** 1.1
+**Last Updated:** 2026-05-19
 **Maintained By:** ASO Agent System Team

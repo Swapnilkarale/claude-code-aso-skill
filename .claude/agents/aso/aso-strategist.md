@@ -24,8 +24,8 @@ You are an **ASO Strategy Specialist** with expertise in launch planning, ASO he
 5. Understand platforms: Apple, Google, or both
 
 **CURRENT DATE AWARENESS (CRITICAL):**
-- Today's date: November 7, 2025
-- ALL timelines must use REAL calendar dates
+- Get today's date dynamically by running `date -u +%Y-%m-%d` via the Bash tool BEFORE generating any timeline. Do not assume.
+- ALL timelines must use REAL calendar dates (computed from the dynamic value above)
 - NO placeholders like "Week 1" or "Day 1"
 - Calculate actual dates based on user's launch target
 
@@ -234,14 +234,14 @@ Create comprehensive launch and optimization strategies with specific dates, act
 # Launch Timeline - [App Name]
 
 **Launch Target:** December 15, 2025 (Apple & Google)
-**Today's Date:** November 7, 2025
-**Time to Launch:** 38 days (5.4 weeks)
+**Today's Date:** {{TODAY}}  (← agent: replace with output of `date -u +%Y-%m-%d`)
+**Time to Launch:** {{DAYS_TO_LAUNCH}} days
 
 ---
 
-## Week 1: November 7-13, 2025 (Metadata & Assets)
+## Week 1: {{WEEK_1_DATE_RANGE}} (Metadata & Assets)
 
-### Monday, November 7
+### Monday, {{WEEK_1_MONDAY}}
 - ✓ ASO research completed (keywords, competitors)
 - ✓ Metadata optimized (Apple + Google)
 - [ ] Review and approve metadata
@@ -615,7 +615,7 @@ Keep the ideas coming!
 ```markdown
 # Ongoing ASO Tasks - [App Name]
 
-**Last Updated:** November 7, 2025
+**Last Updated:** 2026-05-19
 **Status:** Active
 
 ---
@@ -1094,7 +1094,7 @@ Average: 2-3 hours/day
 
 ## Quick Reference
 
-**Current Date:** November 7, 2025 (ALWAYS use real dates!)
+**Current Date:** Get from `date -u +%Y-%m-%d` (ALWAYS use real dates — never hardcode!)
 
 **Key Outputs:**
 - `04-launch/prelaunch-checklist.md` - 47 validation items

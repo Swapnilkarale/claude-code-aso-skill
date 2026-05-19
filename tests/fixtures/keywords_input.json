@@ -1,0 +1,8 @@
+{
+  "keywords_data": [
+    {"keyword": "task manager", "search_volume": 50000, "competition": 75, "relevance": 90},
+    {"keyword": "todo list app", "search_volume": 35000, "competition": 65, "relevance": 95},
+    {"keyword": "productivity app", "search_volume": 80000, "competition": 85, "relevance": 80},
+    {"keyword": "ai task planner", "search_volume": 2500, "competition": 25, "relevance": 95}
+  ]
+}

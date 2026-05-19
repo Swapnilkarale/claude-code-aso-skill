@@ -1,7 +1,7 @@
 # App Store Optimization (ASO) Skill
 
-**Version**: 1.0.0
-**Last Updated**: November 7, 2025
+**Version**: 1.1.0
+**Last Updated**: 2026-05-19
 **Author**: Claude Skills Factory
 
 ## Overview
