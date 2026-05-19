@@ -31,14 +31,13 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 
 # No external dependencies - standard library only
 dependencies = []
@@ -72,8 +71,10 @@ Issues = "https://github.com/alirezarezvani/claude-code-aso-skill/issues"
 Changelog = "https://github.com/alirezarezvani/claude-code-aso-skill/blob/main/CHANGELOG.md"
 
 [tool.ruff]
-# Target Python 3.8+ for backward compatibility
-target-version = "py38"
+# Target Python 3.9+. The 3.8 wheels were already unbuildable because
+# `[build-system] requires setuptools>=82.0.1`, and setuptools 80+ dropped
+# 3.8 support; the matrix has been aligned with that reality.
+target-version = "py39"
 
 # Line length matching ASO skill conventions
 line-length = 100
@@ -143,7 +144,7 @@ docstring-code-line-length = 88
 
 [tool.mypy]
 # Type checking configuration (optional, for future strict typing)
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false  # Allow gradual typing
