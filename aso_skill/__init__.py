@@ -16,6 +16,7 @@ from .localization import LocalizationHelper, plan_localization_strategy
 from .metadata import MetadataOptimizer, optimize_app_metadata
 from .reviews import ReviewAnalyzer, analyze_reviews
 from .scorer import ASOScorer, calculate_aso_score
+from .state import StateStore
 
 __version__ = "1.1.0"
 
@@ -29,6 +30,7 @@ __all__ = [
     "LocalizationHelper",
     "MetadataOptimizer",
     "ReviewAnalyzer",
+    "StateStore",
     "analyze_competitor_set",
     "analyze_keyword_set",
     "analyze_reviews",

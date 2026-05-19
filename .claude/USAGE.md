@@ -1,7 +1,7 @@
 # ASO Agent System Usage Guide
 
-**Version:** 1.0
-**Date:** November 7, 2025
+**Version:** 1.1
+**Date:** 2026-05-19
 
 ---
 
@@ -754,6 +754,6 @@ Track these to measure ASO effectiveness:
 
 ---
 
-**Usage Guide Version:** 1.0
-**Last Updated:** November 7, 2025
+**Usage Guide Version:** 1.1
+**Last Updated:** 2026-05-19
 **Maintained By:** ASO Agent System Team
