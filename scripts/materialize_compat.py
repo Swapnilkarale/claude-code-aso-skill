@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -23,7 +24,8 @@ def _materialize(path: Path, dry_run: bool) -> bool:
         return False
     target = path.resolve()
     if not target.exists():
-        sys.stderr.write(f"  skip (broken link): {path} -> {path.readlink()}\n")
+        # os.readlink works on Python 3.8; Path.readlink is 3.9+.
+        sys.stderr.write(f"  skip (broken link): {path} -> {os.readlink(str(path))}\n")
         return False
     if dry_run:
         sys.stdout.write(f"  would materialize: {path} -> {target}\n")

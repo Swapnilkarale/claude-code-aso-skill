@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 _DEFAULT_TTL_SECONDS = 60 * 60 * 24
-_CACHE_DIR_NAME = os.path.join("aso-skill", "itunes")
 
 
 def _resolve_cache_dir() -> Path:
@@ -98,6 +97,8 @@ class ITunesCache:
             try:
                 path.unlink()
             except OSError:
+                # Best-effort cleanup: if the unreadable cache file can't be
+                # removed either (permissions, race), proceed without it.
                 pass
             return None
         if not allow_stale:
@@ -132,6 +133,8 @@ class ITunesCache:
                 entry.unlink()
                 removed += 1
             except OSError:
+                # Best-effort delete; skip files we can't remove (in use,
+                # permissions) rather than aborting the clear operation.
                 pass
         return removed
 

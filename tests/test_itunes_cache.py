@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from aso_skill import itunes_cache
 from aso_skill.itunes_cache import ITunesCache, cached_urlopen
 
 
@@ -17,10 +18,7 @@ def _isolated_cache_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("ASO_ITUNES_NO_CACHE", raising=False)
     monkeypatch.delenv("ASO_ITUNES_TTL_SECONDS", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    # Reset module-level global so it picks up the new dir
-    import aso_skill.itunes_cache as ic
-
-    monkeypatch.setattr(ic, "_GLOBAL_CACHE", None)
+    monkeypatch.setattr(itunes_cache, "_GLOBAL_CACHE", None)
     yield tmp_path
 
 
