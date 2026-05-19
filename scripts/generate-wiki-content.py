@@ -138,7 +138,7 @@ def generate_api_reference():
                             output.append("**Parameters:**\n\n")
                             for arg in info["args"]:
                                 output.append(
-                                    f"- `{arg['name']}` ({arg['type']}): " f"{arg['description']}\n"
+                                    f"- `{arg['name']}` ({arg['type']}): {arg['description']}\n"
                                 )
                             output.append("\n")
 

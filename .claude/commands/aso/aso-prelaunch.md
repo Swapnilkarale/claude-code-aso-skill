@@ -63,8 +63,8 @@ You: /aso-prelaunch TaskFlow 2025-12-15
 
 aso-strategist: Creating launch plan for TaskFlow (launch: Dec 15, 2025)
 
-Today: November 7, 2025
-Time to launch: 38 days (5.4 weeks)
+Today: <agent computes via `date -u +%Y-%m-%d`>
+Time to launch: <computed days> (computed weeks)
 
 Generating:
 - Pre-launch checklist (47 items across 7 phases)

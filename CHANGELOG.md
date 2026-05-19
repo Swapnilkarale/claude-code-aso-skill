@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - Unreleased
+
+### Foundation overhaul — make the skill a real, tested, installable Python package
+
+This release is internal foundation work. There are no agent-contract changes:
+the four slash commands (`/aso-full-audit`, `/aso-optimize`, `/aso-prelaunch`,
+`/aso-competitor`), the `outputs/[app-name]/` folder layout, and every legacy
+file path inside `app-store-optimization/` and `.claude/skills/aso/` continue
+to work unchanged.
+
+### Added
+- **`aso_skill/` Python package** — canonical home for the eight analytic
+  modules (`scorer.py`, `metadata.py`, `keywords.py`, `competitors.py`,
+  `ab_test.py`, `localization.py`, `reviews.py`, `checklist.py`) plus
+  `itunes.py` and `itunes_cache.py`. Public API is re-exported from
+  `aso_skill/__init__.py`. Now properly `pip install`-able.
+- **`aso` CLI** — new console script (`pip install -e .` exposes `aso`).
+  Subcommands: `score`, `optimize`, `validate`, `keywords`, `ab-test`,
+  `checklist`, `itunes {search,app}`. Reads JSON from `--input` or stdin,
+  writes JSON to `--output` or stdout. Exit codes: 0 ok, 1 validation
+  failure, 2 usage error.
+- **`__main__` blocks** on all analytic modules so `python3 aso_scorer.py
+  < input.json` works — this fixes the previously-broken agent contract at
+  `aso-strategist.md:932`.
+- **`pytest` suite** (`tests/`, 50 tests, runs in <3s, stdlib-only) covering
+  the scorer math, character-limit validation, A/B significance, CLI
+  subprocess invocation, golden-output structural assertions, iTunes cache
+  behaviour, and a date-regression guard.
+- **iTunes file cache** (`aso_skill/itunes_cache.py`) — 24h TTL by default,
+  per-URL keying with `sha1` short hash, stale-fallback on network failure,
+  cache dir under `$XDG_CACHE_HOME/aso-skill/itunes/`. Bypass via
+  `ASO_ITUNES_NO_CACHE=1`; clear via `aso itunes --clear-cache`.
+- **`scripts/materialize_compat.py`** — Windows / ZIP fallback that replaces
+  the backward-compat symlinks with real file copies when the filesystem
+  doesn't support them.
+
+### Changed
+- **`pyproject.toml`** — bumped to 1.1.0, added `[project.scripts]`,
+  `[project.optional-dependencies] test`, `[tool.setuptools.packages.find]`,
+  `[tool.pytest.ini_options]`. Fixed the silent ruff isort
+  `known-first-party` typo (was the hyphenated name, which ruff ignored).
+- **`python-quality.yml`** — now lints `aso_skill scripts tests` (the new
+  canonical paths) and runs `pytest tests/` across the existing 3.8–3.13
+  matrix. Character-limit check rewritten against the dict-form constants.
+- **`.claude/skills/aso/`** — converted from a hand-maintained copy (which
+  had silently drifted from `app-store-optimization/`) into a directory
+  symlink. Drift is now structurally impossible.
+- **Legacy hyphenated paths** (`app-store-optimization/aso_scorer.py` and
+  the seven sibling .py files plus `lib/itunes_api.py`) are now symlinks
+  into `aso_skill/`. Agents that `cd app-store-optimization && python3
+  <module>.py` keep working without modification.
+
+### Fixed
+- **Hardcoded reference date** in `aso-strategist.md` (lines 27, 237, 1097)
+  and `aso-prelaunch.md:66` — replaced with instructions to compute the
+  current date via `date -u +%Y-%m-%d` at run time. Previously every
+  generated timeline after Nov 2025 referenced past dates.
+- **Drift between** `.claude/skills/aso/` and `app-store-optimization/` —
+  every analytic file had diverged (different sizes, different content).
+  Symlinking ends the drift permanently.
+- **Broken agent contract** — `aso-strategist.md:932` invoked
+  `python3 aso_scorer.py < /tmp/aso_input.json` against a module without
+  any `__main__` block. New main blocks make this command work.
+
+### Migration / breaking changes
+- **None for end users.** Every existing path keeps working. ZIP installs,
+  `cp -r app-store-optimization ~/.claude/skills/`, agent prompts, and
+  `/aso-*` slash commands all continue to function.
+- **For contributors:** new code should go in `aso_skill/`, not
+  `app-store-optimization/` (which is now a symlink farm).
+
+---
+
 ## [1.0.0] - 2025-11-07
 
 ### 🎉 Initial Release - Production Ready

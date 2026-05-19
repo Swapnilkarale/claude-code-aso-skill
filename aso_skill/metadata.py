@@ -3,8 +3,7 @@ Metadata optimization module for App Store Optimization.
 Optimizes titles, descriptions, and keyword fields with platform-specific character limit validation.
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-import re
+from typing import Dict, List, Any, Optional
 
 
 class MetadataOptimizer:
@@ -18,13 +17,9 @@ class MetadataOptimizer:
             'promotional_text': 170,
             'description': 4000,
             'keywords': 100,
-            'whats_new': 4000
+            'whats_new': 4000,
         },
-        'google': {
-            'title': 50,
-            'short_description': 80,
-            'full_description': 4000
-        }
+        'google': {'title': 50, 'short_description': 80, 'full_description': 4000},
     }
 
     def __init__(self, platform: str = 'apple'):
@@ -41,10 +36,7 @@ class MetadataOptimizer:
         self.limits = self.CHAR_LIMITS[platform]
 
     def optimize_title(
-        self,
-        app_name: str,
-        target_keywords: List[str],
-        include_brand: bool = True
+        self, app_name: str, target_keywords: List[str], include_brand: bool = True
     ) -> Dict[str, Any]:
         """
         Optimize app title with keyword integration.
@@ -64,78 +56,75 @@ class MetadataOptimizer:
         # Option 1: Brand name only
         if include_brand:
             option1 = app_name[:max_length]
-            title_options.append({
-                'title': option1,
-                'length': len(option1),
-                'remaining_chars': max_length - len(option1),
-                'keywords_included': [],
-                'strategy': 'brand_only',
-                'pros': ['Maximum brand recognition', 'Clean and simple'],
-                'cons': ['No keyword targeting', 'Lower discoverability']
-            })
+            title_options.append(
+                {
+                    'title': option1,
+                    'length': len(option1),
+                    'remaining_chars': max_length - len(option1),
+                    'keywords_included': [],
+                    'strategy': 'brand_only',
+                    'pros': ['Maximum brand recognition', 'Clean and simple'],
+                    'cons': ['No keyword targeting', 'Lower discoverability'],
+                }
+            )
 
         # Option 2: Brand + Primary Keyword
         if target_keywords:
             primary_keyword = target_keywords[0]
-            option2 = self._build_title_with_keywords(
-                app_name,
-                [primary_keyword],
-                max_length
-            )
+            option2 = self._build_title_with_keywords(app_name, [primary_keyword], max_length)
             if option2:
-                title_options.append({
-                    'title': option2,
-                    'length': len(option2),
-                    'remaining_chars': max_length - len(option2),
-                    'keywords_included': [primary_keyword],
-                    'strategy': 'brand_plus_primary',
-                    'pros': ['Targets main keyword', 'Maintains brand identity'],
-                    'cons': ['Limited keyword coverage']
-                })
+                title_options.append(
+                    {
+                        'title': option2,
+                        'length': len(option2),
+                        'remaining_chars': max_length - len(option2),
+                        'keywords_included': [primary_keyword],
+                        'strategy': 'brand_plus_primary',
+                        'pros': ['Targets main keyword', 'Maintains brand identity'],
+                        'cons': ['Limited keyword coverage'],
+                    }
+                )
 
         # Option 3: Brand + Multiple Keywords (if space allows)
         if len(target_keywords) > 1:
-            option3 = self._build_title_with_keywords(
-                app_name,
-                target_keywords[:2],
-                max_length
-            )
+            option3 = self._build_title_with_keywords(app_name, target_keywords[:2], max_length)
             if option3:
-                title_options.append({
-                    'title': option3,
-                    'length': len(option3),
-                    'remaining_chars': max_length - len(option3),
-                    'keywords_included': target_keywords[:2],
-                    'strategy': 'brand_plus_multiple',
-                    'pros': ['Multiple keyword targets', 'Better discoverability'],
-                    'cons': ['May feel cluttered', 'Less brand focus']
-                })
+                title_options.append(
+                    {
+                        'title': option3,
+                        'length': len(option3),
+                        'remaining_chars': max_length - len(option3),
+                        'keywords_included': target_keywords[:2],
+                        'strategy': 'brand_plus_multiple',
+                        'pros': ['Multiple keyword targets', 'Better discoverability'],
+                        'cons': ['May feel cluttered', 'Less brand focus'],
+                    }
+                )
 
         # Option 4: Keyword-first approach (for new apps)
         if target_keywords and not include_brand:
             option4 = " ".join(target_keywords[:2])[:max_length]
-            title_options.append({
-                'title': option4,
-                'length': len(option4),
-                'remaining_chars': max_length - len(option4),
-                'keywords_included': target_keywords[:2],
-                'strategy': 'keyword_first',
-                'pros': ['Maximum SEO benefit', 'Clear functionality'],
-                'cons': ['No brand recognition', 'Generic appearance']
-            })
+            title_options.append(
+                {
+                    'title': option4,
+                    'length': len(option4),
+                    'remaining_chars': max_length - len(option4),
+                    'keywords_included': target_keywords[:2],
+                    'strategy': 'keyword_first',
+                    'pros': ['Maximum SEO benefit', 'Clear functionality'],
+                    'cons': ['No brand recognition', 'Generic appearance'],
+                }
+            )
 
         return {
             'platform': self.platform,
             'max_length': max_length,
             'options': title_options,
-            'recommendation': self._recommend_title_option(title_options)
+            'recommendation': self._recommend_title_option(title_options),
         }
 
     def optimize_description(
-        self,
-        app_info: Dict[str, Any],
-        target_keywords: List[str],
-        description_type: str = 'full'
+        self, app_info: Dict[str, Any], target_keywords: List[str], description_type: str = 'full'
     ) -> Dict[str, Any]:
         """
         Optimize app description with keyword integration and conversion focus.
@@ -156,10 +145,7 @@ class MetadataOptimizer:
             return self._optimize_full_description(app_info, target_keywords)
 
     def optimize_keyword_field(
-        self,
-        target_keywords: List[str],
-        app_title: str = "",
-        app_description: str = ""
+        self, target_keywords: List[str], app_title: str = "", app_description: str = ""
     ) -> Dict[str, Any]:
         """
         Optimize Apple's 100-character keyword field.
@@ -222,14 +208,11 @@ class MetadataOptimizer:
                 'Keywords in title are auto-indexed - no need to repeat',
                 'Use singular forms only (Apple indexes plurals automatically)',
                 'No spaces between commas to maximize character usage',
-                'Update keyword field with each app update to test variations'
-            ]
+                'Update keyword field with each app update to test variations',
+            ],
         }
 
-    def validate_character_limits(
-        self,
-        metadata: Dict[str, str]
-    ) -> Dict[str, Any]:
+    def validate_character_limits(self, metadata: Dict[str, str]) -> Dict[str, Any]:
         """
         Validate all metadata fields against platform character limits.
 
@@ -239,12 +222,7 @@ class MetadataOptimizer:
         Returns:
             Validation report with errors and warnings
         """
-        validation_results = {
-            'is_valid': True,
-            'errors': [],
-            'warnings': [],
-            'field_status': {}
-        }
+        validation_results = {'is_valid': True, 'errors': [], 'warnings': [], 'field_status': {}}
 
         for field_name, value in metadata.items():
             if field_name not in self.limits:
@@ -263,7 +241,7 @@ class MetadataOptimizer:
                 'limit': max_length,
                 'remaining': remaining,
                 'is_valid': actual_length <= max_length,
-                'usage_percentage': round((actual_length / max_length) * 100, 1)
+                'usage_percentage': round((actual_length / max_length) * 100, 1),
             }
 
             validation_results['field_status'][field_name] = field_status
@@ -280,11 +258,7 @@ class MetadataOptimizer:
 
         return validation_results
 
-    def calculate_keyword_density(
-        self,
-        text: str,
-        target_keywords: List[str]
-    ) -> Dict[str, Any]:
+    def calculate_keyword_density(self, text: str, target_keywords: List[str]) -> Dict[str, Any]:
         """
         Calculate keyword density in text.
 
@@ -307,7 +281,7 @@ class MetadataOptimizer:
             keyword_densities[keyword] = {
                 'occurrences': count,
                 'density_percentage': round(density, 2),
-                'status': self._assess_density(density)
+                'status': self._assess_density(density),
             }
 
         # Overall assessment
@@ -319,14 +293,11 @@ class MetadataOptimizer:
             'keyword_densities': keyword_densities,
             'overall_keyword_density': round(overall_density, 2),
             'assessment': self._assess_overall_density(overall_density),
-            'recommendations': self._generate_density_recommendations(keyword_densities)
+            'recommendations': self._generate_density_recommendations(keyword_densities),
         }
 
     def _build_title_with_keywords(
-        self,
-        app_name: str,
-        keywords: List[str],
-        max_length: int
+        self, app_name: str, keywords: List[str], max_length: int
     ) -> Optional[str]:
         """Build title combining app name and keywords within limit."""
         separators = [' - ', ': ', ' | ']
@@ -340,9 +311,7 @@ class MetadataOptimizer:
         return None
 
     def _optimize_short_description(
-        self,
-        app_info: Dict[str, Any],
-        target_keywords: List[str]
+        self, app_info: Dict[str, Any], target_keywords: List[str]
     ) -> Dict[str, Any]:
         """Optimize Google Play short description (80 chars)."""
         max_length = self.limits['short_description']
@@ -359,13 +328,11 @@ class MetadataOptimizer:
             'length': len(short_desc),
             'remaining_chars': max_length - len(short_desc),
             'keywords_included': [primary_keyword] if primary_keyword in short_desc.lower() else [],
-            'strategy': 'keyword_value_proposition'
+            'strategy': 'keyword_value_proposition',
         }
 
     def _optimize_subtitle(
-        self,
-        app_info: Dict[str, Any],
-        target_keywords: List[str]
+        self, app_info: Dict[str, Any], target_keywords: List[str]
     ) -> Dict[str, Any]:
         """Optimize Apple App Store subtitle (30 chars)."""
         max_length = self.limits['subtitle']
@@ -377,19 +344,17 @@ class MetadataOptimizer:
         options = [
             primary_keyword[:max_length],
             key_feature[:max_length],
-            f"{primary_keyword} App"[:max_length]
+            f"{primary_keyword} App"[:max_length],
         ]
 
         return {
             'subtitle_options': [opt for opt in options if opt],
             'max_length': max_length,
-            'recommendation': options[0] if options else ''
+            'recommendation': options[0] if options else '',
         }
 
     def _optimize_full_description(
-        self,
-        app_info: Dict[str, Any],
-        target_keywords: List[str]
+        self, app_info: Dict[str, Any], target_keywords: List[str]
     ) -> Dict[str, Any]:
         """Optimize full app description (4000 chars for both platforms)."""
         max_length = self.limits.get('description', self.limits.get('full_description', 4000))
@@ -411,7 +376,7 @@ class MetadataOptimizer:
                 # Integrate keywords naturally
                 feature_text = f"• {feature}"
                 if i <= len(target_keywords):
-                    keyword = target_keywords[i-1]
+                    keyword = target_keywords[i - 1]
                     if keyword.lower() not in feature.lower():
                         feature_text = f"• {feature} with {keyword}"
                 sections.append(f"{feature_text}\n")
@@ -423,7 +388,9 @@ class MetadataOptimizer:
 
         # Social proof placeholder
         sections.append("WHY USERS LOVE US:\n")
-        sections.append("Join thousands of satisfied users who have transformed their workflow.\n\n")
+        sections.append(
+            "Join thousands of satisfied users who have transformed their workflow.\n\n"
+        )
 
         # CTA
         sections.append("Download now and start experiencing the difference!")
@@ -431,7 +398,7 @@ class MetadataOptimizer:
         # Combine and validate length
         full_description = "".join(sections)
         if len(full_description) > max_length:
-            full_description = full_description[:max_length-3] + "..."
+            full_description = full_description[: max_length - 3] + "..."
 
         # Calculate keyword density
         density = self.calculate_keyword_density(full_description, target_keywords)
@@ -445,8 +412,8 @@ class MetadataOptimizer:
                 'has_hook': True,
                 'has_features': len(features) > 0,
                 'has_benefits': True,
-                'has_cta': True
-            }
+                'has_cta': True,
+            },
         }
 
     def _remove_plural_duplicates(self, keywords: List[str]) -> List[str]:
@@ -511,8 +478,7 @@ class MetadataOptimizer:
             return "Too High: Keyword stuffing detected - rewrite for natural flow"
 
     def _generate_density_recommendations(
-        self,
-        keyword_densities: Dict[str, Dict[str, Any]]
+        self, keyword_densities: Dict[str, Dict[str, Any]]
     ) -> List[str]:
         """Generate recommendations based on keyword density analysis."""
         recommendations = []
@@ -547,9 +513,7 @@ class MetadataOptimizer:
 
 
 def optimize_app_metadata(
-    platform: str,
-    app_info: Dict[str, Any],
-    target_keywords: List[str]
+    platform: str, app_info: Dict[str, Any], target_keywords: List[str]
 ) -> Dict[str, Any]:
     """
     Convenience function to optimize all metadata fields.
@@ -566,16 +530,21 @@ def optimize_app_metadata(
 
     return {
         'platform': platform,
-        'title': optimizer.optimize_title(
-            app_info['name'],
-            target_keywords
-        ),
-        'description': optimizer.optimize_description(
-            app_info,
-            target_keywords,
-            'full'
-        ),
-        'keyword_field': optimizer.optimize_keyword_field(
-            target_keywords
-        ) if platform == 'apple' else None
+        'title': optimizer.optimize_title(app_info['name'], target_keywords),
+        'description': optimizer.optimize_description(app_info, target_keywords, 'full'),
+        'keyword_field': optimizer.optimize_keyword_field(target_keywords)
+        if platform == 'apple'
+        else None,
     }
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+
+    _payload = json.load(sys.stdin)
+    if not isinstance(_payload, dict):
+        sys.stderr.write("Error: expected a JSON object on stdin\n")
+        sys.exit(2)
+    json.dump(optimize_app_metadata(**_payload), sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")

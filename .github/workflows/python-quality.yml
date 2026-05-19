@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
 
     steps:
       - name: Checkout code
@@ -52,15 +52,15 @@ jobs:
         run: |
           set -e
           echo "Validating Python syntax..."
-          find app-store-optimization scripts -name '*.py' -type f -print0 \
+          find aso_skill scripts tests -name '*.py' -type f -print0 \
             | xargs -0 -r python -m py_compile
           echo "All Python files have valid syntax."
 
       - name: Ruff lint
-        run: ruff check app-store-optimization scripts --output-format=github
+        run: ruff check aso_skill scripts tests --output-format=github
 
       - name: Ruff format check
-        run: ruff format --check app-store-optimization scripts
+        run: ruff format --check aso_skill scripts tests
 
       - name: File structure validation
         run: |
@@ -69,7 +69,7 @@ jobs:
           if [ -n "$root_py_files" ]; then
             echo "ERROR: Python files found in repository root:"
             echo "$root_py_files"
-            echo "Move them under app-store-optimization/, scripts/, or tests/."
+            echo "Move them under aso_skill/, scripts/, or tests/."
             exit 1
           fi
           echo "Repository structure OK."
@@ -78,13 +78,20 @@ jobs:
         if: matrix.python-version == '3.13'
         run: |
           set -e
-          file=app-store-optimization/metadata_optimizer.py
-          for needle in 'APPLE_TITLE_LIMIT = 30' 'APPLE_SUBTITLE_LIMIT = 30' 'GOOGLE_TITLE_LIMIT = 50'; do
+          file=aso_skill/metadata.py
+          for needle in "'title': 30" "'subtitle': 30" "'title': 50"; do
             if ! grep -q "$needle" "$file"; then
-              echo "WARNING: expected constant not found in $file: $needle"
+              echo "ERROR: expected character limit not found in $file: $needle"
+              exit 1
             fi
           done
           echo "Platform character limit constants validated."
+
+      - name: Install package and test dependencies
+        run: pip install -e ".[test]"
+
+      - name: Run pytest
+        run: pytest tests/ -v --tb=short
 
   quality-summary:
     name: Quality Summary
