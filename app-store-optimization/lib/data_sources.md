@@ -1,6 +1,6 @@
 # ASO Data Sources Documentation
 
-**Last Updated:** November 7, 2025
+**Last Updated:** 2026-05-19
 **Version:** 1.0
 
 ---
@@ -157,7 +157,7 @@ for comp in competitors:
 ### Usage Pattern
 
 ```python
-from app_store_optimization.lib.scraper import WebFetchPrompts
+from aso_skill.webfetch_prompts import WebFetchPrompts
 
 # Get App Store search results
 config = WebFetchPrompts.app_store_search("productivity")

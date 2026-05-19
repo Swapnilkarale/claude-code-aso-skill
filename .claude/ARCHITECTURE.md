@@ -1,8 +1,8 @@
 # ASO Agent System Architecture
 
-**Project:** aeo-skill
-**Version:** 1.0
-**Date:** November 7, 2025
+**Project:** aso-skill
+**Version:** 1.1
+**Date:** 2026-05-19
 
 ---
 
@@ -36,8 +36,8 @@ app-store-optimization/
 ├── review_analyzer.py            # Review sentiment analysis
 ├── launch_checklist.py           # Pre-launch validation
 └── lib/                          # Data fetching utilities
-    ├── itunes_api.py             # iTunes Search API wrapper
-    ├── scraper.py                # WebFetch utilities
+    ├── itunes_api.py             # symlink → aso_skill/itunes.py
+    ├── scraper.py                # symlink → aso_skill/webfetch_prompts.py (builds WebFetch prompt dicts)
     └── data_sources.md           # Data source documentation
 ```
 

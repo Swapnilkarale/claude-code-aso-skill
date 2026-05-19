@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] - Unreleased
+
+### Foundation polish
+
+- **`aso_skill.StateStore`** — new minimal per-app state store. Persists the
+  last-known `apple_metadata`, `google_metadata`, `keyword_set`,
+  `last_aso_score`, and `competitors` to
+  `outputs/<app>/.state/current.json`. Atomic write via tempfile +
+  `os.replace`. Schema-versioned (`schema_version: 1`); a future-version
+  file raises rather than silently corrupting. 10 new tests.
+- **`aso_skill.webfetch_prompts`** — renamed from `scraper.py` to reflect
+  what the module actually does (it builds `{url, prompt}` dicts the agent
+  feeds into its WebFetch tool — it does no HTTP itself).
+  `app-store-optimization/lib/scraper.py` remains as a backward-compat
+  symlink, so any external references keep working.
+- **Documentation dates** — replaced the 11 hardcoded
+  `November 7, 2025` / `Date:` / `Last Updated:` footers in README,
+  INSTALL, USAGE, ARCHITECTURE, data_sources.md, the implementation plan,
+  branch-protection-setup.md, and CHANGELOG with the current date.
+  Historical references (release-tag dates, "Actual Completion: …",
+  fixture timestamps in API-response examples) are left intact.
+
+---
+
 ## [1.1.0] - Unreleased
 
 ### Foundation overhaul — make the skill a real, tested, installable Python package
@@ -296,4 +320,4 @@ For questions about this changelog:
 
 **Maintained by:** Alireza Rezvani
 **License:** MIT
-**Last Updated:** November 7, 2025
+**Last Updated:** 2026-05-19

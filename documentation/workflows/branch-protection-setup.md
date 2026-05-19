@@ -2,7 +2,7 @@
 
 This guide explains how to configure GitHub branch protection rules for the ASO skill repository to enable the dual-branch protection strategy (dev → main).
 
-**Last Updated:** November 7, 2025
+**Last Updated:** 2026-05-19
 
 ---
 
