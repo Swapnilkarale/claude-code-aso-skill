@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-code-aso-skill"
-version = "1.0.0"
+version = "1.1.0"
 description = "Comprehensive App Store Optimization (ASO) skill for Claude Code with multi-agent system"
 readme = "README.md"
 license = {text = "MIT"}
@@ -47,7 +47,22 @@ dependencies = []
 dev = [
     "ruff>=0.1.0",
     "mypy>=1.19.1",
+    "pytest>=7.0",
 ]
+test = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+aso = "aso_skill.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["aso_skill*"]
+exclude = ["app-store-optimization*", "tests*", ".claude*", "outputs*", "documentation*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [project.urls]
 Homepage = "https://github.com/alirezarezvani/claude-code-aso-skill"
@@ -110,7 +125,7 @@ max-complexity = 15
 
 [tool.ruff.lint.isort]
 # Import sorting configuration
-known-first-party = ["app-store-optimization"]
+known-first-party = ["aso_skill"]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
 
 [tool.ruff.format]
@@ -145,6 +160,6 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Stricter checking for core ASO modules
-module = "app-store-optimization.*"
+module = "aso_skill.*"
 disallow_untyped_defs = false
 check_untyped_defs = true

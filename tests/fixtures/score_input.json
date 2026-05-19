@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "title_keyword_count": 2,
+    "title_length": 28,
+    "description_length": 2200,
+    "description_quality": 0.8,
+    "keyword_density": 4.5
+  },
+  "ratings": {
+    "average_rating": 4.6,
+    "total_ratings": 8500,
+    "recent_ratings_30d": 350
+  },
+  "keyword_performance": {
+    "top_10": 6,
+    "top_50": 18,
+    "top_100": 30,
+    "improving_keywords": 8
+  },
+  "conversion": {
+    "impression_to_install": 0.06,
+    "downloads_last_30_days": 12000,
+    "downloads_trend": "up"
+  }
+}
